@@ -1,6 +1,12 @@
 package cmd
 
-import "github.com/spf13/cobra"
+import (
+	"os"
+
+	"github.com/spf13/cobra"
+)
+
+var chdir string
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
@@ -9,10 +15,15 @@ func newRootCmd() *cobra.Command {
 		Version:       "0.0.0-dev",
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return cmd.Help()
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if chdir != "" {
+				return os.Chdir(chdir)
+			}
+			return nil
 		},
 	}
+	root.PersistentFlags().StringVar(&chdir, "chdir", "", "run as if speclib was started in this directory")
+	root.AddCommand(newInitCmd())
 	return root
 }
 
