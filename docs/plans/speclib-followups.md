@@ -53,6 +53,43 @@ whole-branch review verdict: READY TO MERGE). Ordered by priority for P1.
 12. `XDG_CACHE_HOME` test-cache sandbox is Linux-only (fine — project targets
     Linux; revisit if macOS/Windows support is added).
 
+## Ideas from PDD / promptdriven.ai (triaged 2026-07-17)
+
+Comparison notes: PDD applies "regenerate-not-patch" to a single codebase
+(prompts are project-local source, no versioning/registry/cross-project reuse);
+speclib applies it at the dependency layer (a library maintained once, consumed
+and context-adapted everywhere). Ideas worth pursuing:
+
+- **Staged verification in `sync` (PDD's `crash` → `verify` → `test` → `fix`).**
+  Add a **compile/build gate** before the fixture gate — for generation into a
+  real project, "does it compile + pass the project's build/lint" is a cheaper,
+  earlier check than fixtures. (Already reflected in the blockbuster Phase-2
+  plan: gate on `./gradlew` build + detekt before/with the fixture test.)
+  Optional: generate a runnable **usage example** per dependency (docs +
+  smoke test); the spec's worked examples are a natural source.
+- **Finer-grained fingerprinting + local-drift detection** (PDD skips per
+  sub-step by fingerprint). Add a **generated-code fingerprint** to the lockfile
+  so `sync`/`verify` can detect local edits to generated code and re-run only
+  what's needed, instead of whole-dep up-to-date/skip.
+- **Batch / background non-interactive mode.** For the non-interactive,
+  fixture-gated regeneration path, make the headless backend first-class:
+  "define, launch, walk away," optionally via LLM batch APIs for cost. Aligns
+  with the existing resumable, one-at-a-time headless design.
+
+Considered and NOT pursued:
+
+- **Interface/signature conformance gate** (PDD's `architecture.json`
+  conformance) — parked. speclib's context-adaptation means the generated
+  *shape* is intentionally flexible; the behavioral contract (fixtures) is the
+  right invariant, not the syntactic signature. Revisit only if a spec wants an
+  opt-in exact-signature mode.
+- **Back-propagation (`update`)** — declined. Generated code is checked in and
+  may be hand-edited, but edits are not fed back into the (often third-party)
+  spec.
+- **Auto-deps context discovery** — belongs in the agent generation prompt
+  (auto-gather the consumer's relevant types/schemas), not in the deterministic
+  CLI. Keep the clean seam; make it a step in the generate skill.
+
 ## Design deviations noted (intentional, consistent with the P0 plan)
 
 - `sync --plan` stands in for the design doc's `sync --dry-run`.
