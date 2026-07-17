@@ -16,6 +16,11 @@ type Resolved struct {
 }
 
 func Acquire(ref Ref, constraint, explicit string) (Resolved, *manifest.Library, *spec.Spec, error) {
+	// Each call to Acquire is one logical resolve of ref.Location: forget any
+	// fetch-once memoization ensureMirror recorded for it during an earlier,
+	// independent resolve so this one observes upstream changes (e.g. newly
+	// pushed tags) instead of silently reusing a stale mirror.
+	forgetFetch(ref.Location)
 	if ref.IsLocal {
 		// A local path that is a git repo with semver tags resolves to those
 		// tags (real version + commit SHA), giving version pinning without a
