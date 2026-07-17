@@ -90,6 +90,32 @@ Considered and NOT pursued:
   (auto-gather the consumer's relevant types/schemas), not in the deterministic
   CLI. Keep the clean seam; make it a step in the generate skill.
 
+## From the multi-consumer rollout (2026-07-17)
+
+Dogfooded roku-deeplink across three real consumers (blockbuster/Kotlin,
+cueso/Python, roku-mcp/Python). Learnings:
+
+- **`update` command — SHIPPED** (branch `speclib-update-command`). uv-inspired
+  re-resolve: `speclib update [<dep>] [--to <version>]` moves the lockfile
+  resolution ahead (→ `upgrade-pending`); `speclib sync` then regenerates,
+  materializing the new spec **plus** a computed `SPEC.diff` (git diff of the
+  spec files old→new) and the from/to commits so the agent reconciles against
+  on-disk code. Closes the "no upgrade command" P0 gap.
+- **Selections serialization — SHIPPED.** `sync --record --selections "…"`
+  persists generation choices (e.g. channel subset) into the lockfile
+  provenance; `sync --plan` feeds them back on every regenerate so upgrades
+  honor the same choices. Baking the choice into the PROMPT (the agent picks)
+  is fine — this just serializes the result.
+- **Git mirror cache is not concurrency-safe — OPEN.** The git backend clones
+  each source into `~/.cache/speclib/git/<sha256(source)>` (then `git fetch`).
+  Multiple speclib processes resolving the *same* source concurrently race on
+  that dir (clone/fetch lock errors) — had to run the three consumer subagents
+  sequentially. Fix: a per-cache-dir lock file, or a per-run temp clone.
+- **Reconciliation direction confirmed:** when consumers drift, the spec should
+  conform to the most-exercised consumer (here: `post_launch_key` on the
+  extraction result), not the reverse. The `update`/regenerate loop then pulls
+  the other consumers back to canonical.
+
 ## Design deviations noted (intentional, consistent with the P0 plan)
 
 - `sync --plan` stands in for the design doc's `sync --dry-run`.
