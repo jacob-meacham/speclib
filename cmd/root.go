@@ -24,6 +24,7 @@ func newRootCmd() *cobra.Command {
 	}
 	root.PersistentFlags().StringVar(&chdir, "chdir", "", "run as if speclib was started in this directory")
 	root.AddCommand(newInitCmd())
+	root.AddCommand(newAddCmd())
 	return root
 }
 
