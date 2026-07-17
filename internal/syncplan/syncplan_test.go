@@ -9,6 +9,7 @@ import (
 
 	"github.com/jmeacham/speclib/internal/lockfile"
 	"github.com/jmeacham/speclib/internal/manifest"
+	"github.com/jmeacham/speclib/internal/spec"
 	"github.com/stretchr/testify/require"
 )
 
@@ -61,6 +62,29 @@ func TestComputeReturnsPendingAndUpgradePending(t *testing.T) {
 	missing, err := Compute(m, l, "nonexistent")
 	require.NoError(t, err)
 	require.Empty(t, missing)
+}
+
+// TestComputeExcludesOrphanLockfileEntries covers a lockfile package with no
+// matching manifest entry (e.g. hand-edited state). It can never be
+// generated (there is no source to fetch), so Compute must exclude it rather
+// than hand it to Materialize, which would try to acquire an empty source.
+func TestComputeExcludesOrphanLockfileEntries(t *testing.T) {
+	m := &manifest.Manifest{Dependencies: map[string]manifest.Dependency{
+		"demo": {Path: "gen/demo"},
+	}}
+	l := &lockfile.Lockfile{Packages: []lockfile.Package{
+		{Name: "demo", Commit: "c1"},   // pending, in manifest
+		{Name: "orphan", Commit: "c2"}, // pending, but no manifest entry
+	}}
+	work, err := Compute(m, l, "")
+	require.NoError(t, err)
+	require.Len(t, work, 1)
+	require.Equal(t, "demo", work[0].Name)
+
+	// Naming the orphan directly must not surface it either.
+	only, err := Compute(m, l, "orphan")
+	require.NoError(t, err)
+	require.Empty(t, only)
 }
 
 // makeGitLibRepo builds a git repo whose v1.0.0 and v2.0.0 tags each carry a
@@ -138,6 +162,23 @@ func TestMaterializeUpgradePending(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(diff), "spec v1.0")
 	require.Contains(t, string(diff), "spec v2.0")
+}
+
+// TestFixtureDestRejectsEscape guards against a malicious or malformed local
+// library whose fixtures path yields a spec.File escaping specDir (e.g. via
+// "../"), which would otherwise let Materialize write outside .speclib/work.
+func TestFixtureDestRejectsEscape(t *testing.T) {
+	specDir := filepath.Join(t.TempDir(), "demo")
+
+	_, err := fixtureDest(specDir, spec.File{Path: "../escape.json"})
+	require.Error(t, err)
+
+	_, err = fixtureDest(specDir, spec.File{Path: "fixtures/../../escape.json"})
+	require.Error(t, err)
+
+	dst, err := fixtureDest(specDir, spec.File{Path: "fixtures/a.json"})
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(specDir, "fixtures/a.json"), dst)
 }
 
 func TestMaterialize(t *testing.T) {

@@ -25,3 +25,14 @@ func TestVerifyRunsTestCommands(t *testing.T) {
 	_, err = runCmd(t, dir, "verify")
 	require.Error(t, err)
 }
+
+func TestVerifyUnknownDepErrors(t *testing.T) {
+	dir := t.TempDir()
+	l := &lockfile.Lockfile{Packages: []lockfile.Package{
+		{Name: "ok", Commit: "c", GeneratedCommit: "c", TestCommand: "true"},
+	}}
+	require.NoError(t, l.Save(filepath.Join(dir, "speclib.lock")))
+	_, err := runCmd(t, dir, "verify", "missing")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no such dependency: missing")
+}

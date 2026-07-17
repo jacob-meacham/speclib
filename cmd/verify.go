@@ -23,6 +23,11 @@ func newVerifyCmd() *cobra.Command {
 			if len(args) == 1 {
 				only = args[0]
 			}
+			if only != "" {
+				if _, ok := l.Find(only); !ok {
+					return fmt.Errorf("no such dependency: %s", only)
+				}
+			}
 			var failed []string
 			for _, p := range l.Packages {
 				if only != "" && p.Name != only {

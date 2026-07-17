@@ -43,6 +43,7 @@ func newSyncCmd(backend agent.Backend) *cobra.Command {
 	cmd.Flags().StringVar(&fixtureStatus, "fixture-status", "pass", "with --record: pass|skip|fail")
 	cmd.Flags().StringVar(&generatedCommit, "generated-commit", "", "with --record: spec commit generated from (defaults to resolved commit)")
 	cmd.Flags().StringVar(&selections, "selections", "", "with --record: generation choices to honor on future upgrades")
+	cmd.MarkFlagsMutuallyExclusive("plan", "record")
 	return cmd
 }
 
@@ -58,6 +59,20 @@ func loadState() (*manifest.Manifest, *lockfile.Lockfile, error) {
 	return m, l, nil
 }
 
+// requireKnownDep errors if name names no dependency in either the manifest
+// or the lockfile. It distinguishes a typo'd/unknown name (error) from a
+// known dependency that simply has no pending work (which callers report as
+// "Nothing to sync.").
+func requireKnownDep(m *manifest.Manifest, l *lockfile.Lockfile, name string) error {
+	if _, ok := m.Dependencies[name]; ok {
+		return nil
+	}
+	if _, ok := l.Find(name); ok {
+		return nil
+	}
+	return fmt.Errorf("no such dependency: %s", name)
+}
+
 func runPlan(cmd *cobra.Command, only string, asJSON bool) error {
 	m, l, err := loadState()
 	if err != nil {
@@ -66,6 +81,11 @@ func runPlan(cmd *cobra.Command, only string, asJSON bool) error {
 	pending, err := syncplan.Compute(m, l, only)
 	if err != nil {
 		return err
+	}
+	if only != "" && len(pending) == 0 {
+		if err := requireKnownDep(m, l, only); err != nil {
+			return err
+		}
 	}
 	items := make([]syncplan.Item, 0, len(pending))
 	for _, p := range pending {
@@ -127,6 +147,11 @@ func runHeadless(cmd *cobra.Command, only string, backend agent.Backend) error {
 		return err
 	}
 	if len(pending) == 0 {
+		if only != "" {
+			if err := requireKnownDep(m, l, only); err != nil {
+				return err
+			}
+		}
 		fmt.Fprintln(cmd.OutOrStdout(), "Nothing to sync.")
 		return nil
 	}

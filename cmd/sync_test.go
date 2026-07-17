@@ -89,6 +89,47 @@ func TestSyncRecordSelections(t *testing.T) {
 	require.Equal(t, "channels=roku,fire", p2.Selections)
 }
 
+func TestSyncPlanUnknownDepErrors(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir)
+
+	_, err := runSyncWithStub(t, dir, "sync", "--plan", "nonexistent")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no such dependency: nonexistent")
+}
+
+func TestSyncHeadlessUnknownDepErrors(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir)
+
+	_, err := runSyncWithStub(t, dir, "sync", "nonexistent")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no such dependency: nonexistent")
+}
+
+func TestSyncKnownDepAlreadyUpToDateDoesNotError(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir)
+	// Mark demo up-to-date: GeneratedCommit == Commit.
+	l, _ := lockfile.Load(filepath.Join(dir, "speclib.lock"))
+	p, _ := l.Find("demo")
+	p.Commit = "local"
+	p.GeneratedCommit = "local"
+	require.NoError(t, l.Save(filepath.Join(dir, "speclib.lock")))
+
+	out, err := runSyncWithStub(t, dir, "sync", "--plan", "demo")
+	require.NoError(t, err)
+	require.Contains(t, out, "Nothing to sync.")
+}
+
+func TestSyncPlanAndRecordAreMutuallyExclusive(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir)
+
+	_, err := runSyncWithStub(t, dir, "sync", "--plan", "--record", "demo")
+	require.Error(t, err)
+}
+
 func TestSyncHeadlessGeneratesAndRecords(t *testing.T) {
 	dir := t.TempDir()
 	setupPending(t, dir)

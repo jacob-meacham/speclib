@@ -34,9 +34,11 @@ func parseResultLine(out string) (testCmd, fixtureStatus string) {
 	for i := len(lines) - 1; i >= 0; i-- {
 		line := strings.TrimSpace(lines[i])
 		if rest, ok := strings.CutPrefix(line, "RESULT "); ok {
-			parts := strings.SplitN(rest, " || ", 2)
-			if len(parts) == 2 {
-				return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+			// Split on the last " || " so a test command that itself
+			// contains " || " (e.g. a shell fallback) is not mis-split.
+			idx := strings.LastIndex(rest, " || ")
+			if idx >= 0 {
+				return strings.TrimSpace(rest[:idx]), strings.TrimSpace(rest[idx+len(" || "):])
 			}
 		}
 	}

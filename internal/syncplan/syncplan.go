@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/jmeacham/speclib/internal/lockfile"
 	"github.com/jmeacham/speclib/internal/manifest"
 	"github.com/jmeacham/speclib/internal/source"
+	"github.com/jmeacham/speclib/internal/spec"
 )
 
 type Item struct {
@@ -27,10 +29,15 @@ type Item struct {
 
 // Compute returns packages needing generation: both pending (never generated)
 // and upgrade-pending (resolution moved ahead of the generated commit).
+// Lockfile packages with no matching manifest entry are excluded: they are
+// orphaned (e.g. hand-edited lockfile state) and have no source to acquire.
 func Compute(m *manifest.Manifest, l *lockfile.Lockfile, only string) ([]lockfile.Package, error) {
 	var out []lockfile.Package
 	for _, p := range l.Packages {
 		if only != "" && p.Name != only {
+			continue
+		}
+		if _, ok := m.Dependencies[p.Name]; !ok {
 			continue
 		}
 		switch p.State() {
@@ -49,25 +56,28 @@ func Materialize(workRoot string, dep manifest.Dependency, pkg lockfile.Package)
 	ref := source.Parse(dep.Source)
 	_, lib, sp, err := source.Acquire(ref, dep.Version, pkg.Version)
 	if err != nil {
-		return Item{}, err
+		return Item{}, fmt.Errorf("acquire %s: %w", pkg.Name, err)
 	}
 	specDir := filepath.Join(workRoot, pkg.Name)
 	if err := os.MkdirAll(specDir, 0o755); err != nil {
-		return Item{}, err
+		return Item{}, fmt.Errorf("create spec dir for %s: %w", pkg.Name, err)
 	}
 	if err := os.WriteFile(filepath.Join(specDir, "PROMPT.md"), sp.Prompt, 0o644); err != nil {
-		return Item{}, err
+		return Item{}, fmt.Errorf("write PROMPT.md for %s: %w", pkg.Name, err)
 	}
 	if err := os.WriteFile(filepath.Join(specDir, "SPEC.md"), sp.SpecDoc, 0o644); err != nil {
-		return Item{}, err
+		return Item{}, fmt.Errorf("write SPEC.md for %s: %w", pkg.Name, err)
 	}
 	for _, f := range sp.Fixtures {
-		dst := filepath.Join(specDir, f.Path)
+		dst, err := fixtureDest(specDir, f)
+		if err != nil {
+			return Item{}, fmt.Errorf("materialize %s: %w", pkg.Name, err)
+		}
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-			return Item{}, err
+			return Item{}, fmt.Errorf("create fixture dir for %s (%s): %w", pkg.Name, f.Path, err)
 		}
 		if err := os.WriteFile(dst, f.Data, 0o644); err != nil {
-			return Item{}, err
+			return Item{}, fmt.Errorf("write fixture %s (%s): %w", pkg.Name, f.Path, err)
 		}
 	}
 	item := Item{
@@ -88,7 +98,7 @@ func Materialize(workRoot string, dep manifest.Dependency, pkg lockfile.Package)
 		}
 		diffPath := filepath.Join(specDir, "SPEC.diff")
 		if err := os.WriteFile(diffPath, []byte(diff), 0o644); err != nil {
-			return Item{}, err
+			return Item{}, fmt.Errorf("write SPEC.diff for %s: %w", pkg.Name, err)
 		}
 		item.FromCommit = pkg.GeneratedCommit
 		item.ToVersion = pkg.Version
@@ -99,5 +109,15 @@ func Materialize(workRoot string, dep manifest.Dependency, pkg lockfile.Package)
 	return item, nil
 }
 
-// ErrNoWork is returned by callers when there is nothing to do.
-var ErrNoWork = fmt.Errorf("nothing to sync")
+// fixtureDest returns the on-disk path for fixture f within specDir, erroring
+// if f's declared path would resolve outside specDir (e.g. via a "../"
+// component) rather than silently writing there. This guards against a
+// malformed or malicious library manifest whose fixtures list escapes root.
+func fixtureDest(specDir string, f spec.File) (string, error) {
+	dst := filepath.Join(specDir, f.Path)
+	rel, err := filepath.Rel(specDir, dst)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("fixture path %q escapes spec directory", f.Path)
+	}
+	return dst, nil
+}
