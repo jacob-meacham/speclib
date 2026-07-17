@@ -106,11 +106,18 @@ cueso/Python, roku-mcp/Python). Learnings:
   provenance; `sync --plan` feeds them back on every regenerate so upgrades
   honor the same choices. Baking the choice into the PROMPT (the agent picks)
   is fine — this just serializes the result.
-- **Git mirror cache is not concurrency-safe — OPEN.** The git backend clones
-  each source into `~/.cache/speclib/git/<sha256(source)>` (then `git fetch`).
-  Multiple speclib processes resolving the *same* source concurrently race on
-  that dir (clone/fetch lock errors) — had to run the three consumer subagents
-  sequentially. Fix: a per-cache-dir lock file, or a per-run temp clone.
+- **Git mirror cache is not concurrency-safe — OPEN (elevate to P0 hardening).**
+  The git backend clones each source into `~/.cache/speclib/git/<sha256(source)>`
+  (then `git fetch`). Multiple speclib processes resolving the *same* source
+  concurrently race on that dir (clone/fetch lock errors) — had to run the three
+  consumer subagents sequentially. Fix: a per-cache-dir lock file (`flock`), or a
+  per-run temp clone. Needed before any parallel/CI use.
+- **`--chdir` global-state hazard — OPEN** (P0-review Important, plan-mandated).
+  The root command's `chdir` is a package var + a process-wide `os.Chdir` in
+  `PersistentPreRunE` with no restore. Harmless today (every cmd test passes
+  `--chdir` to a fresh temp dir), but latent for any `cmd` test doing relative
+  I/O or using `t.Parallel()`. Fix: thread a working dir instead of chdir, or
+  restore cwd after Execute.
 - **Reconciliation direction confirmed:** when consumers drift, the spec should
   conform to the most-exercised consumer (here: `post_launch_key` on the
   extraction result), not the reverse. The `update`/regenerate loop then pulls
