@@ -2,7 +2,9 @@ package syncplan
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jmeacham/speclib/internal/lockfile"
@@ -23,24 +25,32 @@ func writeDemoLib(t *testing.T, dir string) {
 	write("fixtures/a.json", "1")
 }
 
-func TestComputeReturnsPending(t *testing.T) {
+func TestComputeReturnsPendingAndUpgradePending(t *testing.T) {
 	m := &manifest.Manifest{Dependencies: map[string]manifest.Dependency{
-		"demo": {Path: "gen/demo"}, "done": {Path: "gen/done"},
+		"demo": {Path: "gen/demo"}, "upg": {Path: "gen/upg"}, "done": {Path: "gen/done"},
 	}}
 	l := &lockfile.Lockfile{Packages: []lockfile.Package{
 		{Name: "demo", Commit: "c1"},                        // pending
+		{Name: "upg", Commit: "c2", GeneratedCommit: "c1"},  // upgrade-pending
 		{Name: "done", Commit: "c2", GeneratedCommit: "c2"}, // up-to-date
 	}}
-	pend, err := Compute(m, l, "")
+	work, err := Compute(m, l, "")
 	require.NoError(t, err)
-	require.Len(t, pend, 1)
-	require.Equal(t, "demo", pend[0].Name)
+	require.Len(t, work, 2)
+	names := []string{work[0].Name, work[1].Name}
+	require.ElementsMatch(t, []string{"demo", "upg"}, names)
 
 	// only filter: named pending package returns just that package.
 	only, err := Compute(m, l, "demo")
 	require.NoError(t, err)
 	require.Len(t, only, 1)
 	require.Equal(t, "demo", only[0].Name)
+
+	// only filter: an upgrade-pending package is included.
+	upg, err := Compute(m, l, "upg")
+	require.NoError(t, err)
+	require.Len(t, upg, 1)
+	require.Equal(t, "upg", upg[0].Name)
 
 	// only filter: naming an up-to-date package still filters it out.
 	upToDate, err := Compute(m, l, "done")
@@ -51,6 +61,83 @@ func TestComputeReturnsPending(t *testing.T) {
 	missing, err := Compute(m, l, "nonexistent")
 	require.NoError(t, err)
 	require.Empty(t, missing)
+}
+
+// makeGitLibRepo builds a git repo whose v1.0.0 and v2.0.0 tags each carry a
+// full spec-library differing only in SPEC.md ("spec v1.0" vs "spec v2.0"),
+// and returns the repo path plus the two tag commit SHAs. The XDG cache is
+// sandboxed so the source package's git mirror stays out of the real ~/.cache.
+func makeGitLibRepo(t *testing.T) (repo, v1, v2 string) {
+	t.Helper()
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	dir := t.TempDir()
+	git := func(args ...string) string {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, string(out))
+		return strings.TrimSpace(string(out))
+	}
+	write := func(rel, body string) {
+		p := filepath.Join(dir, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
+	}
+	libToml := "[library]\nname = \"demo\"\n[files]\nprompt = \"PROMPT.md\"\nspec = \"SPEC.md\"\nfixtures = \"fixtures/\"\n"
+
+	git("init", "-q")
+	write("speclib.toml", libToml)
+	write("PROMPT.md", "prompt")
+	write("SPEC.md", "spec v1.0")
+	write("fixtures/a.json", "1")
+	git("add", "-A")
+	git("commit", "-qm", "v1.0.0")
+	git("tag", "v1.0.0")
+	v1 = git("rev-list", "-n", "1", "v1.0.0")
+
+	write("SPEC.md", "spec v2.0")
+	git("add", "-A")
+	git("commit", "-qm", "v2.0.0")
+	git("tag", "v2.0.0")
+	v2 = git("rev-list", "-n", "1", "v2.0.0")
+
+	return dir, v1, v2
+}
+
+func TestMaterializeUpgradePending(t *testing.T) {
+	repo, v1, v2 := makeGitLibRepo(t)
+	work := t.TempDir()
+
+	dep := manifest.Dependency{Source: repo, Version: "*", Path: "gen/demo", Language: "go"}
+	// GeneratedCommit at v1, resolved Commit at v2 => upgrade-pending.
+	pkg := lockfile.Package{
+		Name: "demo", Source: repo, Version: "2.0.0", Commit: v2,
+		GeneratedCommit: v1, Selections: "channels=roku", Language: "go", Path: "gen/demo",
+	}
+	require.Equal(t, lockfile.UpgradePending, pkg.State())
+
+	item, err := Materialize(work, dep, pkg)
+	require.NoError(t, err)
+	require.Equal(t, "upgrade-pending", item.State)
+	require.Equal(t, v1, item.FromCommit)
+	require.Equal(t, "2.0.0", item.ToVersion)
+	require.Equal(t, v2, item.ToCommit)
+	require.Equal(t, "channels=roku", item.Selections)
+
+	// Full new spec is materialized (SPEC.md is the v2 content).
+	specMd, err := os.ReadFile(filepath.Join(item.SpecDir, "SPEC.md"))
+	require.NoError(t, err)
+	require.Equal(t, "spec v2.0", string(specMd))
+
+	// SPEC.diff is written and reflects the spec change.
+	require.Equal(t, filepath.Join(item.SpecDir, "SPEC.diff"), item.SpecDiffPath)
+	diff, err := os.ReadFile(item.SpecDiffPath)
+	require.NoError(t, err)
+	require.Contains(t, string(diff), "spec v1.0")
+	require.Contains(t, string(diff), "spec v2.0")
 }
 
 func TestMaterialize(t *testing.T) {
@@ -72,4 +159,10 @@ func TestMaterialize(t *testing.T) {
 	require.FileExists(t, filepath.Join(item.SpecDir, "PROMPT.md"))
 	require.FileExists(t, filepath.Join(item.SpecDir, "SPEC.md"))
 	require.FileExists(t, filepath.Join(item.SpecDir, "fixtures", "a.json"))
+	// Pending items carry no upgrade metadata and produce no diff.
+	require.Empty(t, item.FromCommit)
+	require.Empty(t, item.ToVersion)
+	require.Empty(t, item.ToCommit)
+	require.Empty(t, item.SpecDiffPath)
+	require.NoFileExists(t, filepath.Join(item.SpecDir, "SPEC.diff"))
 }

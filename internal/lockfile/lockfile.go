@@ -44,6 +44,7 @@ type Package struct {
 	Generator       string `toml:"generator,omitempty"`
 	FixtureStatus   string `toml:"fixture_status,omitempty"`
 	TestCommand     string `toml:"test_command,omitempty"`
+	Selections      string `toml:"selections,omitempty"`
 }
 
 func (p Package) State() State {

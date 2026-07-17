@@ -105,6 +105,15 @@ func gitReadFile(location, ref, path string) ([]byte, error) {
 	return []byte(out), nil
 }
 
+func gitDiff(location, fromRef, toRef string, paths []string) (string, error) {
+	dir, err := ensureMirror(location)
+	if err != nil {
+		return "", err
+	}
+	args := append([]string{"diff", fromRef + ".." + toRef, "--"}, paths...)
+	return gitOut(dir, args...)
+}
+
 func gitListFiles(location, ref, sub string) ([]string, error) {
 	dir, err := ensureMirror(location)
 	if err != nil {

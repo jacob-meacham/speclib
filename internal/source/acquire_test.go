@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jmeacham/speclib/internal/manifest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -91,6 +92,33 @@ func TestAcquireGitExplicit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "1.0.0", res2.Version)
 	require.Equal(t, "spec v1.0", string(sp2.SpecDoc))
+}
+
+// TestSpecDiff checks that SpecDiff returns a unified diff of the spec files
+// between two commits, and that an empty/"local" commit yields no diff.
+func TestSpecDiff(t *testing.T) {
+	repo := makeRepoTwoLibs(t) // SPEC.md: "spec v1.0" @v1.0.0 -> "spec v2.0" @v2.0.0
+	ref := Ref{Raw: repo, IsLocal: false, Location: repo}
+
+	from, err := gitResolveCommit(repo, "v1.0.0")
+	require.NoError(t, err)
+	to, err := gitResolveCommit(repo, "v2.0.0")
+	require.NoError(t, err)
+
+	files := manifest.Files{Prompt: "PROMPT.md", Spec: "SPEC.md", Fixtures: "fixtures/"}
+	diff, err := SpecDiff(ref, from, to, files)
+	require.NoError(t, err)
+	require.Contains(t, diff, "SPEC.md")
+	require.Contains(t, diff, "spec v1.0") // removed line
+	require.Contains(t, diff, "spec v2.0") // added line
+
+	// No diff available when either commit is empty or the local sentinel.
+	empty, err := SpecDiff(ref, "", to, files)
+	require.NoError(t, err)
+	require.Empty(t, empty)
+	local, err := SpecDiff(ref, "local", to, files)
+	require.NoError(t, err)
+	require.Empty(t, local)
 }
 
 // TestAcquireLocalGitRepoUsesTags covers the local-versioning fix: a path that

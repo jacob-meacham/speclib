@@ -35,6 +35,22 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	require.Equal(t, UpToDate, got.Packages[0].State())
 }
 
+func TestSelectionsRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "speclib.lock")
+	l := &Lockfile{Packages: []Package{{
+		Name: "a", Commit: "c1", GeneratedCommit: "c1",
+		Selections: "channels=roku,fire", TestCommand: "npm test",
+	}}}
+	require.NoError(t, l.Save(path))
+
+	got, err := Load(path)
+	require.NoError(t, err)
+	require.Equal(t, "channels=roku,fire", got.Packages[0].Selections)
+	// Selections is generation metadata; it must not influence the state machine.
+	require.Equal(t, UpToDate, got.Packages[0].State())
+}
+
 func TestRemove(t *testing.T) {
 	l := &Lockfile{Packages: []Package{{Name: "a"}, {Name: "b"}}}
 	l.Remove("a")

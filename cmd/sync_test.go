@@ -71,6 +71,24 @@ func TestSyncRecord(t *testing.T) {
 	require.Equal(t, lockfile.UpToDate, p2.State())
 }
 
+func TestSyncRecordSelections(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir)
+	l, _ := lockfile.Load(filepath.Join(dir, "speclib.lock"))
+	p, _ := l.Find("demo")
+	p.Commit = "abc123"
+	require.NoError(t, l.Save(filepath.Join(dir, "speclib.lock")))
+
+	_, err := runSyncWithStub(t, dir, "sync", "--record", "demo",
+		"--test-command", "go test ./gen/demo", "--fixture-status", "pass",
+		"--selections", "channels=roku,fire")
+	require.NoError(t, err)
+
+	l2, _ := lockfile.Load(filepath.Join(dir, "speclib.lock"))
+	p2, _ := l2.Find("demo")
+	require.Equal(t, "channels=roku,fire", p2.Selections)
+}
+
 func TestSyncHeadlessGeneratesAndRecords(t *testing.T) {
 	dir := t.TempDir()
 	setupPending(t, dir)

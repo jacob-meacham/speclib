@@ -105,6 +105,21 @@ func acquireGit(ref Ref, constraint, explicit string) (Resolved, *manifest.Libra
 	return Resolved{Version: chosen, Commit: commit}, lib, sp, nil
 }
 
+// SpecDiff returns a unified diff of the spec files (prompt, spec doc, and the
+// fixtures path) between fromCommit and toCommit, computed against the source's
+// git mirror. If either commit is empty or the "local" sentinel there is no
+// diff to compute and it returns ("", nil).
+func SpecDiff(ref Ref, fromCommit, toCommit string, files manifest.Files) (string, error) {
+	if fromCommit == "" || toCommit == "" || fromCommit == "local" || toCommit == "local" {
+		return "", nil
+	}
+	paths := []string{files.Prompt, files.Spec}
+	if files.Fixtures != "" {
+		paths = append(paths, strings.TrimSuffix(files.Fixtures, "/"))
+	}
+	return gitDiff(ref.Location, fromCommit, toCommit, paths)
+}
+
 func assembleSpec(files manifest.Files, read func(string) ([]byte, error), listFixtures func(string) ([]spec.File, error)) (*spec.Spec, error) {
 	prompt, err := read(files.Prompt)
 	if err != nil {

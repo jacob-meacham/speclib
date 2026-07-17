@@ -16,7 +16,7 @@ import (
 
 func newSyncCmd(backend agent.Backend) *cobra.Command {
 	var plan, asJSON bool
-	var record, testCmd, fixtureStatus, generatedCommit string
+	var record, testCmd, fixtureStatus, generatedCommit, selections string
 	cmd := &cobra.Command{
 		Use:   "sync [dep]",
 		Short: "Generate code for pending dependencies (one at a time)",
@@ -28,7 +28,7 @@ func newSyncCmd(backend agent.Backend) *cobra.Command {
 			}
 			switch {
 			case record != "":
-				return runRecord(cmd, record, testCmd, fixtureStatus, generatedCommit)
+				return runRecord(cmd, record, testCmd, fixtureStatus, generatedCommit, selections)
 			case plan:
 				return runPlan(cmd, only, asJSON)
 			default:
@@ -42,6 +42,7 @@ func newSyncCmd(backend agent.Backend) *cobra.Command {
 	cmd.Flags().StringVar(&testCmd, "test-command", "", "with --record, the test command to re-run in verify")
 	cmd.Flags().StringVar(&fixtureStatus, "fixture-status", "pass", "with --record: pass|skip|fail")
 	cmd.Flags().StringVar(&generatedCommit, "generated-commit", "", "with --record: spec commit generated from (defaults to resolved commit)")
+	cmd.Flags().StringVar(&selections, "selections", "", "with --record: generation choices to honor on future upgrades")
 	return cmd
 }
 
@@ -91,7 +92,7 @@ func runPlan(cmd *cobra.Command, only string, asJSON bool) error {
 	return nil
 }
 
-func runRecord(cmd *cobra.Command, name, testCmd, fixtureStatus, generatedCommit string) error {
+func runRecord(cmd *cobra.Command, name, testCmd, fixtureStatus, generatedCommit, selections string) error {
 	_, l, err := loadState()
 	if err != nil {
 		return err
@@ -108,6 +109,7 @@ func runRecord(cmd *cobra.Command, name, testCmd, fixtureStatus, generatedCommit
 	p.Generator = "claude-code"
 	p.TestCommand = testCmd
 	p.FixtureStatus = fixtureStatus
+	p.Selections = selections
 	if err := l.Save(paths.Lock); err != nil {
 		return err
 	}
@@ -141,7 +143,7 @@ func runHeadless(cmd *cobra.Command, only string, backend agent.Backend) error {
 		if err != nil {
 			return fmt.Errorf("generate %s: %w", p.Name, err)
 		}
-		if err := runRecord(cmd, p.Name, res.TestCommand, res.FixtureStatus, ""); err != nil {
+		if err := runRecord(cmd, p.Name, res.TestCommand, res.FixtureStatus, "", ""); err != nil {
 			return err
 		}
 	}
