@@ -3,6 +3,25 @@
 Captured during the P0 subagent-driven build. None block P0 merge (final
 whole-branch review verdict: READY TO MERGE). Ordered by priority for P1.
 
+## Shipped — P0/P1 hardening (branch `speclib-update-command`, 2026-07-17)
+
+- **git-clone injection hardening** + **cache concurrency lock** (`flock`) +
+  **fetch-once per resolve** — item 1 + the concurrency item + item 11 (`aa80e07`).
+- **Orphan lockfile entry** no longer crashes `sync`; **`verify`/`sync
+  <unknown-dep>`** now error; **fixture-path traversal guard**;
+  **`parseResultLine`** splits on the last `||`; removed dead `ErrNoWork`;
+  `sync` `--plan`/`--record` mutually exclusive; lockfile godoc + `Materialize`
+  error wrapping — items 3, 4, 5, 6, 7, 8, 10 (`86a6cc2`).
+- **Materialize at the pinned commit** (not the re-resolved tag) — item 2
+  (`47c31b7`), proven with a moved-tag test.
+- **Upgrade workflow** (`update` + upgrade-aware `sync` + `SPEC.diff`) and
+  **selections serialization** — the P1 core (`a9f2b08`).
+
+**Still open:** `--chdir` global-state hazard (deferred — latent-only, needs a
+working-dir refactor); drift-fingerprint / staged compile-gate (P1 enhancements,
+deferred); item 9 `sort.SliceStable` (cosmetic, unreachable); item 12 Linux-only
+test sandbox (accepted).
+
 ## P1 priority
 
 1. **Harden `git clone` of user-declared sources** (`internal/source/git.go`,
