@@ -17,9 +17,27 @@ type Resolved struct {
 
 func Acquire(ref Ref, constraint, explicit string) (Resolved, *manifest.Library, *spec.Spec, error) {
 	if ref.IsLocal {
+		// A local path that is a git repo with semver tags resolves to those
+		// tags (real version + commit SHA), giving version pinning without a
+		// remote. Non-git dirs, or git repos with no semver tags, fall back to
+		// an unversioned working-tree read.
+		if isGitRepoWithTags(ref.Location) {
+			return acquireGit(ref, constraint, explicit)
+		}
 		return acquireLocal(ref)
 	}
 	return acquireGit(ref, constraint, explicit)
+}
+
+// isGitRepoWithTags reports whether path is a git repository that has at least
+// one semver tag. The rev-parse gate avoids attempting a mirror clone of a
+// non-git directory.
+func isGitRepoWithTags(path string) bool {
+	if _, err := gitRun(path, "rev-parse", "--git-dir"); err != nil {
+		return false
+	}
+	vs, _, err := gitTags(path)
+	return err == nil && len(vs) > 0
 }
 
 func acquireLocal(ref Ref) (Resolved, *manifest.Library, *spec.Spec, error) {

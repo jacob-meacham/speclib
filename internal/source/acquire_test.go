@@ -92,3 +92,22 @@ func TestAcquireGitExplicit(t *testing.T) {
 	require.Equal(t, "1.0.0", res2.Version)
 	require.Equal(t, "spec v1.0", string(sp2.SpecDoc))
 }
+
+// TestAcquireLocalGitRepoUsesTags covers the local-versioning fix: a path that
+// Parse classifies as local but which is a git repo with semver tags resolves
+// to the tag version + a real commit SHA (not "0.0.0+local"/"local"), giving
+// version pinning from a local path without needing a remote.
+func TestAcquireLocalGitRepoUsesTags(t *testing.T) {
+	repo := makeRepoWithLib(t) // git repo whose v1.1.0 tag carries a full library
+	ref := Parse(repo)
+	require.True(t, ref.IsLocal) // sanity: an absolute path is classified local...
+
+	res, lib, sp, err := Acquire(ref, "*", "")
+	require.NoError(t, err)
+	// ...yet because it is a git repo with tags, it resolves via git tags.
+	require.Equal(t, "1.1.0", res.Version)
+	require.Len(t, res.Commit, 40)
+	require.NotEqual(t, "local", res.Commit)
+	require.Equal(t, "demo", lib.Meta.Name)
+	require.Equal(t, "spec v1.1", string(sp.SpecDoc))
+}
