@@ -164,6 +164,60 @@ func TestMaterializeUpgradePending(t *testing.T) {
 	require.Contains(t, string(diff), "spec v2.0")
 }
 
+// TestMaterializeHonorsPinnedCommitAcrossMovedTag proves Materialize generates
+// from the lockfile's pinned commit rather than re-resolving the dependency's
+// version constraint against the source's tags. If the tag is force-moved
+// upstream between `lock`/`update` and `sync` (as it is here), the version
+// it currently points to would carry different content than the lockfile
+// pinned; Materialize must still write the pinned commit's SPEC.md.
+func TestMaterializeHonorsPinnedCommitAcrossMovedTag(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	dir := t.TempDir()
+	git := func(args ...string) string {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, string(out))
+		return strings.TrimSpace(string(out))
+	}
+	write := func(rel, body string) {
+		p := filepath.Join(dir, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
+	}
+	libToml := "[library]\nname = \"demo\"\n[files]\nprompt = \"PROMPT.md\"\nspec = \"SPEC.md\"\nfixtures = \"fixtures/\"\n"
+
+	git("init", "-q")
+	write("speclib.toml", libToml)
+	write("PROMPT.md", "prompt")
+	write("SPEC.md", "spec A")
+	write("fixtures/a.json", "1")
+	git("add", "-A")
+	git("commit", "-qm", "v1.0.0")
+	git("tag", "v1.0.0")
+	pinned := git("rev-list", "-n", "1", "v1.0.0")
+
+	// Force-move v1.0.0 to a new commit with different spec content, mimicking
+	// an upstream rewrite that happens between lock/update and sync.
+	write("SPEC.md", "spec B")
+	git("add", "-A")
+	git("commit", "-qm", "moved")
+	git("tag", "-f", "v1.0.0")
+
+	work := t.TempDir()
+	dep := manifest.Dependency{Source: dir, Version: "^1", Path: "gen/demo", Language: "go"}
+	pkg := lockfile.Package{Name: "demo", Source: dir, Version: "1.0.0", Commit: pinned, Language: "go", Path: "gen/demo"}
+
+	item, err := Materialize(work, dep, pkg)
+	require.NoError(t, err)
+	specMd, err := os.ReadFile(filepath.Join(item.SpecDir, "SPEC.md"))
+	require.NoError(t, err)
+	require.Equal(t, "spec A", string(specMd)) // pinned content, not the moved tag's "spec B"
+}
+
 // TestFixtureDestRejectsEscape guards against a malicious or malformed local
 // library whose fixtures path yields a spec.File escaping specDir (e.g. via
 // "../"), which would otherwise let Materialize write outside .speclib/work.

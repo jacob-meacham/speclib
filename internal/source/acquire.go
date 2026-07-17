@@ -87,17 +87,52 @@ func acquireGit(ref Ref, constraint, explicit string) (Resolved, *manifest.Libra
 	if err != nil {
 		return Resolved{}, nil, nil, err
 	}
-	libData, err := gitReadFile(ref.Location, tag, "speclib.toml")
-	if err != nil {
-		return Resolved{}, nil, nil, fmt.Errorf("read library manifest at %s: %w", tag, err)
-	}
-	lib, err := manifest.ParseLibrary(libData)
+	lib, sp, err := readLibAndSpec(ref.Location, tag)
 	if err != nil {
 		return Resolved{}, nil, nil, err
 	}
-	read := func(p string) ([]byte, error) { return gitReadFile(ref.Location, tag, p) }
+	return Resolved{Version: chosen, Commit: commit}, lib, sp, nil
+}
+
+// AcquireAtCommit reads the spec-library at an immutable pinned commit,
+// bypassing tag resolution entirely. sync/Materialize uses this instead of
+// Acquire: the lockfile pins a commit SHA (Package.Commit), and if the
+// constraint's tag has since been force-moved (e.g. `git tag -f`) to
+// different content, re-resolving via the tag — as Acquire does — would
+// silently generate against that different content instead of the content
+// the lockfile actually records.
+//
+// The git-vs-local branch mirrors Acquire's: a non-git local source has no
+// commits to pin against (acquireLocal always reports the "local" sentinel),
+// so commit is ignored and this falls back to reading the current working
+// tree, same as Acquire does for that source.
+func AcquireAtCommit(ref Ref, commit string) (*manifest.Library, *spec.Spec, error) {
+	forgetFetch(ref.Location)
+	if ref.IsLocal && !isGitRepoWithTags(ref.Location) {
+		_, lib, sp, err := acquireLocal(ref)
+		return lib, sp, err
+	}
+	return readLibAndSpec(ref.Location, commit)
+}
+
+// readLibAndSpec reads speclib.toml and the spec files (prompt/spec/fixtures)
+// out of location at commitish, which git accepts as either a tag or a full
+// commit SHA. acquireGit and AcquireAtCommit share this: they differ only in
+// how commitish is obtained (resolved from a version constraint vs. taken
+// directly from a lockfile pin), not in how the library is read once it is
+// known.
+func readLibAndSpec(location, commitish string) (*manifest.Library, *spec.Spec, error) {
+	libData, err := gitReadFile(location, commitish, "speclib.toml")
+	if err != nil {
+		return nil, nil, fmt.Errorf("read library manifest at %s: %w", commitish, err)
+	}
+	lib, err := manifest.ParseLibrary(libData)
+	if err != nil {
+		return nil, nil, err
+	}
+	read := func(p string) ([]byte, error) { return gitReadFile(location, commitish, p) }
 	listFixtures := func(sub string) ([]spec.File, error) {
-		paths, err := gitListFiles(ref.Location, tag, sub)
+		paths, err := gitListFiles(location, commitish, sub)
 		if err != nil {
 			return nil, err
 		}
@@ -105,9 +140,9 @@ func acquireGit(ref Ref, constraint, explicit string) (Resolved, *manifest.Libra
 	}
 	sp, err := assembleSpec(lib.Files, read, listFixtures)
 	if err != nil {
-		return Resolved{}, nil, nil, err
+		return nil, nil, err
 	}
-	return Resolved{Version: chosen, Commit: commit}, lib, sp, nil
+	return lib, sp, nil
 }
 
 // SpecDiff returns a unified diff of the spec files (prompt, spec doc, and the

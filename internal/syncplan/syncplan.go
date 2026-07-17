@@ -54,7 +54,11 @@ func Compute(m *manifest.Manifest, l *lockfile.Lockfile, only string) ([]lockfil
 // the from/to provenance (and prior selections) on the Item.
 func Materialize(workRoot string, dep manifest.Dependency, pkg lockfile.Package) (Item, error) {
 	ref := source.Parse(dep.Source)
-	_, lib, sp, err := source.Acquire(ref, dep.Version, pkg.Version)
+	// Materialize generates from the lockfile's pinned commit, not from
+	// re-resolving dep.Version's tag: if the tag has since been force-moved
+	// upstream, resolving it here would generate against different content
+	// than the lockfile records.
+	lib, sp, err := source.AcquireAtCommit(ref, pkg.Commit)
 	if err != nil {
 		return Item{}, fmt.Errorf("acquire %s: %w", pkg.Name, err)
 	}
