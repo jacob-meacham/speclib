@@ -3,12 +3,17 @@ package cmd
 import (
 	"os"
 
+	"github.com/jmeacham/speclib/internal/agent"
 	"github.com/spf13/cobra"
 )
 
 var chdir string
 
 func newRootCmd() *cobra.Command {
+	return newRootCmdWithBackend(agent.HeadlessClaude{})
+}
+
+func newRootCmdWithBackend(backend agent.Backend) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "speclib",
 		Short:         "A package manager for spec-driven libraries",
@@ -29,10 +34,9 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newStatusCmd())
 	root.AddCommand(newRemoveCmd())
 	root.AddCommand(newVerifyCmd())
+	root.AddCommand(newSyncCmd(backend))
 	return root
 }
 
 // Execute runs the root command. main() calls this.
-func Execute() error {
-	return newRootCmd().Execute()
-}
+func Execute() error { return newRootCmd().Execute() }
