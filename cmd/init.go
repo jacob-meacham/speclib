@@ -16,8 +16,8 @@ func newInitCmd() *cobra.Command {
 			if err := scaffold.WriteManifest("."); err != nil {
 				return err
 			}
-			if agent == "claude" {
-				if err := scaffold.WriteClaudeAgent("."); err != nil {
+			if agent != "" {
+				if err := scaffold.WriteAgent(".", agent); err != nil {
 					return err
 				}
 			}
@@ -25,6 +25,6 @@ func newInitCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&agent, "agent", "", "install integration for this agent (claude)")
+	cmd.Flags().StringVar(&agent, "agent", "", "install integration for this agent (claude, cursor, agents)")
 	return cmd
 }

@@ -1,8 +1,3 @@
----
-name: speclib-sync
-description: Generate or update code for speclib spec-library dependencies. Use when the user runs `speclib sync`, asks to generate a spec-library dependency, or after `speclib add`.
----
-
 # speclib sync
 
 You generate implementation code from spec-driven libraries. The `speclib` CLI
@@ -31,8 +26,11 @@ time**.
         generation choices as last time (e.g. the channel subset) — unless the
         user asks to change them. If `SPEC.diff` is empty, fall back to the full
         `SPEC.md` as the source of truth.
-   d. Write a test in `language` that exercises the fixtures, and run it. Fix and
-      repeat until it passes. If the library ships no fixtures, note that.
+   d. Verify cheaply first, then thoroughly: run the project's build/compile
+      step and its linter, and fix any errors they report — they're faster to
+      catch than fixture failures. Only once those are clean, write a test in
+      `language` that exercises the fixtures, and run it. Fix and repeat until
+      the fixture test passes. If the library ships no fixtures, note that.
    e. If the agent needs a decision the spec doesn't cover (e.g. a field the
       local types lack), **ask the user** before guessing.
    f. Record provenance:
