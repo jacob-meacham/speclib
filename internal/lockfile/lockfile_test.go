@@ -51,6 +51,22 @@ func TestSelectionsRoundTrip(t *testing.T) {
 	require.Equal(t, UpToDate, got.Packages[0].State())
 }
 
+func TestGeneratedHashRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "speclib.lock")
+	l := &Lockfile{Packages: []Package{{
+		Name: "a", Commit: "c1", GeneratedCommit: "c1",
+		GeneratedHash: "sha256:deadbeef",
+	}}}
+	require.NoError(t, l.Save(path))
+
+	got, err := Load(path)
+	require.NoError(t, err)
+	require.Equal(t, "sha256:deadbeef", got.Packages[0].GeneratedHash)
+	// GeneratedHash is generation metadata; it must not influence the state machine.
+	require.Equal(t, UpToDate, got.Packages[0].State())
+}
+
 func TestRemove(t *testing.T) {
 	l := &Lockfile{Packages: []Package{{Name: "a"}, {Name: "b"}}}
 	l.Remove("a")

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jmeacham/speclib/internal/agent"
+	"github.com/jmeacham/speclib/internal/fingerprint"
 	"github.com/jmeacham/speclib/internal/lockfile"
 	"github.com/jmeacham/speclib/internal/manifest"
 	"github.com/jmeacham/speclib/internal/paths"
@@ -130,6 +131,12 @@ func runRecord(cmd *cobra.Command, name, testCmd, fixtureStatus, generatedCommit
 	p.TestCommand = testCmd
 	p.FixtureStatus = fixtureStatus
 	p.Selections = selections
+	// Best-effort: an unreadable generated-code dir shouldn't block recording.
+	if hash, hashErr := fingerprint.HashDir(p.Path); hashErr == nil {
+		p.GeneratedHash = hash
+	} else {
+		fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not hash %s: %v\n", p.Path, hashErr)
+	}
 	if err := l.Save(paths.Lock); err != nil {
 		return err
 	}

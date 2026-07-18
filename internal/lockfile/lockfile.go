@@ -56,6 +56,9 @@ type Package struct {
 	FixtureStatus   string `toml:"fixture_status,omitempty"`
 	TestCommand     string `toml:"test_command,omitempty"`
 	Selections      string `toml:"selections,omitempty"`
+	// GeneratedHash is the fingerprint.HashDir digest of Path recorded at
+	// generation time, used to detect drift from hand-edits.
+	GeneratedHash string `toml:"generated_hash,omitempty"`
 }
 
 // State derives the package's generation state by comparing its resolved

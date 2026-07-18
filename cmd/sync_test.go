@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/jmeacham/speclib/internal/agent"
+	"github.com/jmeacham/speclib/internal/fingerprint"
 	"github.com/jmeacham/speclib/internal/lockfile"
 	"github.com/jmeacham/speclib/internal/manifest"
 	"github.com/stretchr/testify/require"
@@ -69,6 +71,38 @@ func TestSyncRecord(t *testing.T) {
 	require.Equal(t, "abc123", p2.GeneratedCommit)
 	require.Equal(t, "pass", p2.FixtureStatus)
 	require.Equal(t, lockfile.UpToDate, p2.State())
+}
+
+func TestSyncRecordComputesGeneratedHash(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir)
+	genDir := filepath.Join(dir, "gen", "demo")
+	require.NoError(t, os.MkdirAll(genDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(genDir, "demo.go"), []byte("package demo"), 0o644))
+
+	_, err := runSyncWithStub(t, dir, "sync", "--record", "demo", "--test-command", "go test ./gen/demo", "--fixture-status", "pass")
+	require.NoError(t, err)
+
+	want, err := fingerprint.HashDir(genDir)
+	require.NoError(t, err)
+	require.NotEmpty(t, want)
+
+	l2, _ := lockfile.Load(filepath.Join(dir, "speclib.lock"))
+	p2, _ := l2.Find("demo")
+	require.Equal(t, want, p2.GeneratedHash)
+}
+
+func TestSyncRecordMissingDirLeavesHashEmpty(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir)
+	// gen/demo does not exist.
+
+	_, err := runSyncWithStub(t, dir, "sync", "--record", "demo", "--test-command", "true", "--fixture-status", "pass")
+	require.NoError(t, err)
+
+	l2, _ := lockfile.Load(filepath.Join(dir, "speclib.lock"))
+	p2, _ := l2.Find("demo")
+	require.Empty(t, p2.GeneratedHash)
 }
 
 func TestSyncRecordSelections(t *testing.T) {
