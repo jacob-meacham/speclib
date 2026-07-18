@@ -36,6 +36,9 @@ func newRootCmdWithBackend(backend agent.Backend) *cobra.Command {
 	root.AddCommand(newRemoveCmd())
 	root.AddCommand(newVerifyCmd())
 	root.AddCommand(newSyncCmd(backend))
+	root.AddCommand(newNewCmd())
+	root.AddCommand(newLintCmd())
+	root.AddCommand(newReleaseCmd())
 	return root
 }
 
