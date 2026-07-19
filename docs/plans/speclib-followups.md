@@ -220,10 +220,28 @@ step. So the fix lives in the sync skill, not the CLI:
   most-exercised path). This makes cueso's live code spec-conformant, so its
   reconciliation is now "track `streaming.py`, delete dead `deeplink.py`" rather
   than a wire-the-dead-module contortion.
-- **PENDING — consumer reconciliations** (each also a v1.2.0→v1.3.0 upgrade):
-  cueso (track live `streaming.py`, delete `deeplink.py` + its ~373 dead-test
-  lines); roku-mcp (delete dead Function 2 or wire it, resync Function 1,
-  honest status); blockbuster (resync, fix banner + `!!`).
+- **SHIPPED — consumer reconciliations** (all upgraded to v1.3.0, each on its
+  repo's `speclib-roku-deeplink` branch, verified):
+  - **blockbuster** (`179c3c9`) — data-driven catalog gained Hulu/Apple TV+;
+    banner fixed `v1.1.0`→`v1.3.0`; `!!` removed (`requireNotNull`). Generated
+    core already live. `fixture_status=pass` (full catalog incl. Emby; all 35
+    fixtures run). 294 tests + detekt green.
+  - **roku-mcp** (`db27d26`) — Function 2 was dead; **wired** it into the live
+    play path (`ecp_client.launch_with_deeplink → execute_playback_command(
+    build_playback_command(...))`), removing the duplicated 2000ms delay so the
+    generated code now runs. Function 1 resynced (Hulu/Apple TV+). Honest
+    `fixture_status=skip` (no Emby). Recorded test scoped to the deeplink tests
+    so `verify` isn't tripped by a pre-existing `test_config` env failure.
+  - **cueso** (`a2c4a1e`) — **retargeted** speclib from the dead `deeplink.py`
+    to the live `streaming.py` (Function 1 `match_url_full`) + `search_and_play.py`
+    (Function 2 `launch_on_roku`, executed inline); **deleted** `deeplink.py`
+    (171 lines) + `test_deeplink.py` (372). New fixture test validates the live
+    path via a documented internal-name→spec-channel adapter. Honest
+    `fixture_status=skip` (no Emby). 227→200 tests green (−61 dead, +34 live).
+  All three now satisfy the retrofit rule: the tracked code is the code that
+  runs, and the lock's status is honest. (Note: cueso's `config.yml` gates Hulu
+  off at runtime — a feature-flag selection, not dead code; the tracked code
+  supports all six channels.)
 - **DEFERRED (optional tool hardening):** `sync --record` could refuse `pass`
   when fewer fixtures ran than the library ships; a liveness *heuristic* in
   `verify` remains possible but is deprioritized in favor of the discipline fix.
