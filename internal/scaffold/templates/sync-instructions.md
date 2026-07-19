@@ -26,15 +26,37 @@ time**.
         generation choices as last time (e.g. the channel subset) — unless the
         user asks to change them. If `SPEC.diff` is empty, fall back to the full
         `SPEC.md` as the source of truth.
+
+      **Retrofit — when this behavior already exists in hand-written code.** If
+      the project already implements this behavior (a pre-existing module, or
+      code on the live call path), do **not** generate a parallel copy beside
+      it. Find the implementation that actually runs — trace it from the app's
+      entry points, not just any file that looks related — reconcile *that* code
+      against the spec, and make it the tracked `target_path`. Then delete any
+      now-redundant duplicate and its tests. Two implementations of one spec
+      (one tracked, one live) is the exact failure this tool exists to prevent:
+      the tracked copy can pass fixtures while the live copy silently drifts.
+      **The generated code must be the code that runs.**
+
+      Put a provenance header on the generated file naming the library and the
+      resolved version (e.g. `roku-deeplink v1.3.0`); on an `upgrade-pending`
+      sync, update it to the new version so the file never disagrees with
+      `speclib.lock`.
    d. Verify cheaply first, then thoroughly: run the project's build/compile
       step and its linter, and fix any errors they report — they're faster to
       catch than fixture failures. Only once those are clean, write a test in
       `language` that exercises the fixtures, and run it. Fix and repeat until
       the fixture test passes. If the library ships no fixtures, note that.
+      Then confirm the code you generated is actually reachable from the app —
+      imported and called outside of tests — not just exercised by the fixture
+      test. A fixture test passing against code nothing calls is a false green.
    e. If the agent needs a decision the spec doesn't cover (e.g. a field the
       local types lack), **ask the user** before guessing.
    f. Record provenance:
       `speclib sync --record <name> --test-command "<cmd>" --fixture-status <pass|skip>`
+      Use `--fixture-status pass` only when **every** fixture ran and passed; if
+      you excluded or skipped any (e.g. a channel this consumer doesn't use),
+      record `skip`, never `pass`, so the lock's status stays honest.
       Also pass `--selections "<choices>"` capturing any generation choices you
       made (e.g. which channels/options), so future upgrades honor them.
 3. Stop after the last item. Tell the user what was generated and how to

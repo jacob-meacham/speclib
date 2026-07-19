@@ -142,6 +142,92 @@ cueso/Python, roku-mcp/Python). Learnings:
   extraction result), not the reverse. The `update`/regenerate loop then pulls
   the other consumers back to canonical.
 
+## Self-hosting dogfood — SHIPPED (2026-07-17)
+
+Proved the whole thesis on speclib itself: authored a spec-library **of
+speclib's own core** and regenerated it in a second language, fixture-validated.
+
+- **`speclib-core`** (`/code/jacob/speclib-core`, local git, tag **v0.1.0**) —
+  a spec of speclib's four deterministic pure functions (`spec_hash`,
+  `select_version`, `package_state`, `compute_plan`). `test_fixtures.json` (22
+  cases) was **generated from the Go reference** (a throwaway generator that
+  called the real `spec.Hash` / `source.PickVersion` / `lockfile.Package.State`
+  / `syncplan.Compute`, then deleted — the fixtures are the durable artifact).
+  Authored, `speclib lint`-clean, and `speclib release 0.1.0`-tagged entirely
+  through the CLI (dogfooding the author tooling).
+- **`speclib-core-rs`** (`/code/jacob/speclib-core-rs`, commit `a6abd95`) — a
+  Rust port generated via `speclib add`/`sync` against the spec, validated with
+  `cargo test` against the **byte-identical** Go fixtures: all 22 cases pass,
+  incl. `spec_hash` reproducing `sha256:d89f4179…` exactly. `clippy -D warnings`
+  clean; `speclib verify → PASS`; `status → up-to-date pass clean`.
+- **Learning — a spec must pin cross-language semantics that libraries disagree
+  on.** Go's Masterminds semver treats a bare `"1.4.0"` as **exact**; Rust's
+  `semver` crate treats it as **caret**. The fixtures encode Go's behavior, so
+  SPEC §3.2 had to state "bare = exact (use `=1.4.0` in Rust)" explicitly, and
+  the Rust impl rewrites leading-digit constraints to `=`. Same class of thing
+  as the byte-exact hash encoding: **behavioral fixtures catch dialect drift the
+  prose would otherwise paper over.** This is the strongest argument yet for
+  fixtures-as-contract over signature conformance.
+
+## External adoption review — the liveness/provenance gap (2026-07-19)
+
+An independent review of the three roku-deeplink adoptions (graded against a
+code constitution) found the sharpest failure mode of the whole exercise.
+**Generation was correct everywhere** — every regex/channel-ID/delay
+byte-faithful, all three fixture suites pass. **Wiring was not.** In 2 of 3
+repos the spec-tracked artifact is not the code that runs (dead code):
+
+- **blockbuster (A−)** — model adoption; both generated functions live on the
+  runtime path (the catalog collapsed five hand-written channel impls into one
+  data table). Only smell: `RokuEcp.kt:11` banner still says `v1.1.0` while
+  `speclib.lock` pins `1.2.0` (verified) + a `!!` in the fixture test.
+- **roku-mcp (C+)** — Function 1 live + excellent regression tests for the two
+  reconciled regex drifts; but the entire Function-2 surface
+  (`build_playback_command` + dataclasses) has **zero non-test callers**
+  (verified) — the live client hand-rolls launch→sleep→keypress, so the delay
+  exists twice and the fixture-tested copy is dead. Recorded `fixture_status =
+  pass` while skipping the Emby fixtures.
+- **cueso (C−)** — `deeplink.py` has **zero importers** (verified); the live
+  path `streaming.py` re-implements the same spec regexes with
+  `# Per roku-deeplink-spec:` comments as the only sync and had **drifted past
+  the spec** (Hulu 2285, Apple TV+ 551012 — verified). speclib was tracking the
+  dead copy while the live copy drifted untracked.
+
+**The defect, precisely:** speclib verifies "does the generated code match the
+spec?" but never "is the generated code the code that runs?" Its value over
+"paste the spec into your agent" is provenance/drift-tracking; a tracked-but-dead
+artifact makes `fixture_status = pass` a claim about a *file*, not the repo's
+behavior. The pattern that predicts the grade: **generation-as-replacement wires
+itself (blockbuster); generation-alongside-an-incumbent needs an explicit
+integrate-and-decommission step** — which neither the tool nor the driver
+enforced.
+
+**Decision — fix in generation discipline, not a tool gate.** A `verify`
+caller-grep is a blunt instrument, and retrofitting a library over existing
+hand-written code is an unusual migration that inherently needs a decommission
+step. So the fix lives in the sync skill, not the CLI:
+
+- **SHIPPED** (`internal/scaffold/templates/sync-instructions.md`): a **Retrofit
+  rule** (find the live implementation, reconcile *it* against the spec, make it
+  the tracked target, delete the duplicate — "the generated code must be the
+  code that runs"), a **liveness confirmation** in the verify step (the
+  generated code must be reachable outside tests), **honest `fixture_status`**
+  (`skip`, never `pass`, when any fixture is excluded), and **provenance-header
+  ownership** (stamp/refresh the resolved version so the file never disagrees
+  with the lock).
+- **SHIPPED — spec response:** `roku-deeplink` **v1.3.0** adds Hulu + Apple TV+,
+  conforming the canonical catalog to cueso's *live* `streaming.py` (the truly
+  most-exercised path). This makes cueso's live code spec-conformant, so its
+  reconciliation is now "track `streaming.py`, delete dead `deeplink.py`" rather
+  than a wire-the-dead-module contortion.
+- **PENDING — consumer reconciliations** (each also a v1.2.0→v1.3.0 upgrade):
+  cueso (track live `streaming.py`, delete `deeplink.py` + its ~373 dead-test
+  lines); roku-mcp (delete dead Function 2 or wire it, resync Function 1,
+  honest status); blockbuster (resync, fix banner + `!!`).
+- **DEFERRED (optional tool hardening):** `sync --record` could refuse `pass`
+  when fewer fixtures ran than the library ships; a liveness *heuristic* in
+  `verify` remains possible but is deprioritized in favor of the discipline fix.
+
 ## Design deviations noted (intentional, consistent with the P0 plan)
 
 - `sync --plan` stands in for the design doc's `sync --dry-run`.
