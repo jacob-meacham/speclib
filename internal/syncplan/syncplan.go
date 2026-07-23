@@ -13,10 +13,10 @@ import (
 )
 
 type Item struct {
-	Name        string `json:"name"`
-	State       string `json:"state"`
-	TargetPath  string `json:"target_path"`
-	Language    string `json:"language"`
+	Name        string   `json:"name"`
+	State       string   `json:"state"`
+	TargetPath  string   `json:"target_path"`
+	Language    string   `json:"language"`
 	ContextFile string   `json:"context_file,omitempty"`
 	SpecDir     string   `json:"spec_dir"`
 	Checks      []string `json:"checks,omitempty"`
