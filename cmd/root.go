@@ -9,6 +9,10 @@ import (
 
 var chdir string
 
+// version is stamped by goreleaser at release time via
+// -ldflags "-X github.com/jacob-meacham/speclib/cmd.version=...".
+var version = "0.0.0-dev"
+
 func newRootCmd() *cobra.Command {
 	return newRootCmdWithBackend(agent.HeadlessClaude{})
 }
@@ -17,7 +21,7 @@ func newRootCmdWithBackend(backend agent.Backend) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "speclib",
 		Short:         "A package manager for spec-driven libraries",
-		Version:       "0.0.0-dev",
+		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
