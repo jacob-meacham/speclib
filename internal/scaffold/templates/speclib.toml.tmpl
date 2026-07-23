@@ -2,6 +2,10 @@
 # Default target language for generated dependencies.
 language = ""
 
+# Commands the sync agent must run clean (exit 0) before recording a sync —
+# build, lint, format-check. Run by the agent during sync, never by the CLI.
+# checks = ["go build ./...", "golangci-lint run"]
+
 # Declare spec-library dependencies with `speclib add <source> --path <dir>`,
 # then generate their code with `speclib sync`.
 [dependencies]

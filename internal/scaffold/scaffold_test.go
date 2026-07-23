@@ -22,6 +22,18 @@ func TestWriteAgentClaude(t *testing.T) {
 	require.Contains(t, body, "speclib sync --plan")
 	require.Contains(t, body, "run the project's build/compile")
 	require.Contains(t, body, "linter")
+	require.Contains(t, body, "`checks`")
+	require.Contains(t, body, "exits 0")
+	require.Contains(t, body, "if a check failed or was skipped")
+}
+
+func TestWriteManifestIncludesChecksExample(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, WriteManifest(dir))
+
+	data, err := os.ReadFile(filepath.Join(dir, "speclib.toml"))
+	require.NoError(t, err)
+	require.Contains(t, string(data), `# checks = ["go build ./...", "golangci-lint run"]`)
 }
 
 func TestWriteAgentCursor(t *testing.T) {
