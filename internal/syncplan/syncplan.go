@@ -17,8 +17,9 @@ type Item struct {
 	State       string `json:"state"`
 	TargetPath  string `json:"target_path"`
 	Language    string `json:"language"`
-	ContextFile string `json:"context_file,omitempty"`
-	SpecDir     string `json:"spec_dir"`
+	ContextFile string   `json:"context_file,omitempty"`
+	SpecDir     string   `json:"spec_dir"`
+	Checks      []string `json:"checks,omitempty"`
 	// upgrade-pending only
 	FromCommit   string `json:"from_commit,omitempty"`
 	ToVersion    string `json:"to_version,omitempty"`
@@ -51,8 +52,9 @@ func Compute(m *manifest.Manifest, l *lockfile.Lockfile, only string) ([]lockfil
 // Materialize fetches the spec and writes it under workRoot/<name>/ for the
 // agent. For an upgrade-pending package it also writes a SPEC.diff of the spec
 // files between the generated commit and the newly resolved commit, and records
-// the from/to provenance (and prior selections) on the Item.
-func Materialize(workRoot string, dep manifest.Dependency, pkg lockfile.Package) (Item, error) {
+// the from/to provenance (and prior selections) on the Item. checks is the
+// consumer project's declared check commands, copied onto the Item verbatim.
+func Materialize(workRoot string, dep manifest.Dependency, pkg lockfile.Package, checks []string) (Item, error) {
 	ref := source.Parse(dep.Source)
 	// Materialize generates from the lockfile's pinned commit, not from
 	// re-resolving dep.Version's tag: if the tag has since been force-moved
@@ -91,6 +93,7 @@ func Materialize(workRoot string, dep manifest.Dependency, pkg lockfile.Package)
 		Language:    pkg.Language,
 		ContextFile: dep.Context,
 		SpecDir:     specDir,
+		Checks:      checks,
 	}
 	if pkg.State() == lockfile.UpgradePending {
 		// Best-effort spec diff. A diff we cannot compute (e.g. a non-git local

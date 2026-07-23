@@ -90,7 +90,7 @@ func runPlan(cmd *cobra.Command, only string, asJSON bool) error {
 	}
 	items := make([]syncplan.Item, 0, len(pending))
 	for _, p := range pending {
-		item, err := syncplan.Materialize(paths.WorkDir, m.Dependencies[p.Name], p)
+		item, err := syncplan.Materialize(paths.WorkDir, m.Dependencies[p.Name], p, m.Project.Checks)
 		if err != nil {
 			return err
 		}
@@ -163,7 +163,7 @@ func runHeadless(cmd *cobra.Command, only string, backend agent.Backend) error {
 		return nil
 	}
 	for _, p := range pending {
-		item, err := syncplan.Materialize(paths.WorkDir, m.Dependencies[p.Name], p)
+		item, err := syncplan.Materialize(paths.WorkDir, m.Dependencies[p.Name], p, m.Project.Checks)
 		if err != nil {
 			return err
 		}

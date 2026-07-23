@@ -143,9 +143,10 @@ func TestMaterializeUpgradePending(t *testing.T) {
 	}
 	require.Equal(t, lockfile.UpgradePending, pkg.State())
 
-	item, err := Materialize(work, dep, pkg)
+	item, err := Materialize(work, dep, pkg, nil)
 	require.NoError(t, err)
 	require.Equal(t, "upgrade-pending", item.State)
+	require.Empty(t, item.Checks)
 	require.Equal(t, v1, item.FromCommit)
 	require.Equal(t, "2.0.0", item.ToVersion)
 	require.Equal(t, v2, item.ToCommit)
@@ -211,7 +212,7 @@ func TestMaterializeHonorsPinnedCommitAcrossMovedTag(t *testing.T) {
 	dep := manifest.Dependency{Source: dir, Version: "^1", Path: "gen/demo", Language: "go"}
 	pkg := lockfile.Package{Name: "demo", Source: dir, Version: "1.0.0", Commit: pinned, Language: "go", Path: "gen/demo"}
 
-	item, err := Materialize(work, dep, pkg)
+	item, err := Materialize(work, dep, pkg, nil)
 	require.NoError(t, err)
 	specMd, err := os.ReadFile(filepath.Join(item.SpecDir, "SPEC.md"))
 	require.NoError(t, err)
@@ -243,13 +244,14 @@ func TestMaterialize(t *testing.T) {
 	dep := manifest.Dependency{Source: libDir, Version: "*", Path: "gen/demo", Language: "go", Context: "speclib/demo.md"}
 	pkg := lockfile.Package{Name: "demo", Source: libDir, Version: "0.0.0+local", Language: "go", Path: "gen/demo"}
 
-	item, err := Materialize(work, dep, pkg)
+	item, err := Materialize(work, dep, pkg, []string{"go build ./...", "go vet ./..."})
 	require.NoError(t, err)
 	require.Equal(t, "demo", item.Name)
 	require.Equal(t, "pending", item.State)
 	require.Equal(t, "gen/demo", item.TargetPath)
 	require.Equal(t, "go", item.Language)
 	require.Equal(t, "speclib/demo.md", item.ContextFile)
+	require.Equal(t, []string{"go build ./...", "go vet ./..."}, item.Checks)
 	require.Equal(t, "demo", filepath.Base(item.SpecDir))
 	require.FileExists(t, filepath.Join(item.SpecDir, "PROMPT.md"))
 	require.FileExists(t, filepath.Join(item.SpecDir, "SPEC.md"))
