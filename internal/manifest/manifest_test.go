@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -23,6 +24,36 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, m.Dependencies["roku-deeplink"], got.Dependencies["roku-deeplink"])
 	require.Equal(t, "typescript", got.Project.Language)
+}
+
+func TestChecksRoundTripAndDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "speclib.toml")
+
+	m := &Manifest{
+		Project: Project{Language: "rust", Checks: []string{
+			"cargo build",
+			"cargo clippy --all-targets -- -D warnings",
+			"cargo fmt --check",
+		}},
+		Dependencies: map[string]Dependency{},
+	}
+	require.NoError(t, m.Save(path))
+
+	got, err := Load(path)
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		"cargo build",
+		"cargo clippy --all-targets -- -D warnings",
+		"cargo fmt --check",
+	}, got.Project.Checks)
+
+	// A manifest that never mentions checks loads with none.
+	bare := filepath.Join(dir, "bare.toml")
+	require.NoError(t, os.WriteFile(bare, []byte("[project]\nlanguage = \"go\"\n"), 0o644))
+	got2, err := Load(bare)
+	require.NoError(t, err)
+	require.Empty(t, got2.Project.Checks)
 }
 
 func TestLoadMissingReturnsEmpty(t *testing.T) {

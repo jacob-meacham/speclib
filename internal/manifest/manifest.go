@@ -17,7 +17,8 @@ type Dependency struct {
 }
 
 type Project struct {
-	Language string `toml:"language,omitempty"`
+	Language string   `toml:"language,omitempty"`
+	Checks   []string `toml:"checks,omitempty"`
 }
 
 type Manifest struct {
