@@ -14,12 +14,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupPending(t *testing.T, dir string) {
+func setupPending(t *testing.T, dir string, checks ...string) {
 	t.Helper()
 	lib := filepath.Join(dir, "lib")
 	writeDemoLib(t, lib)
 	m := &manifest.Manifest{
-		Project:      manifest.Project{Language: "go"},
+		Project:      manifest.Project{Language: "go", Checks: checks},
 		Dependencies: map[string]manifest.Dependency{"demo": {Source: lib, Version: "*", Path: "gen/demo"}},
 	}
 	require.NoError(t, m.Save(filepath.Join(dir, "speclib.toml")))
@@ -51,7 +51,22 @@ func TestSyncPlanJSON(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &plan))
 	require.Len(t, plan.Items, 1)
 	require.Equal(t, "demo", plan.Items[0]["name"])
+	_, hasChecks := plan.Items[0]["checks"]
+	require.False(t, hasChecks, "checks key must be absent when the manifest declares none")
 	require.FileExists(t, filepath.Join(dir, ".speclib", "work", "demo", "SPEC.md"))
+}
+
+func TestSyncPlanJSONIncludesChecks(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir, "go build ./...", "go vet ./...")
+
+	out, err := runSyncWithStub(t, dir, "sync", "--plan", "--json")
+	require.NoError(t, err)
+
+	var plan struct{ Items []map[string]any }
+	require.NoError(t, json.Unmarshal([]byte(out), &plan))
+	require.Len(t, plan.Items, 1)
+	require.Equal(t, []any{"go build ./...", "go vet ./..."}, plan.Items[0]["checks"])
 }
 
 func TestSyncRecord(t *testing.T) {
