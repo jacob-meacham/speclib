@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jmeacham/speclib/internal/manifest"
+	"github.com/jacob-meacham/speclib/internal/manifest"
 	"github.com/stretchr/testify/require"
 )
 

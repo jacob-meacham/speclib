@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jmeacham/speclib/internal/agent"
-	"github.com/jmeacham/speclib/internal/fingerprint"
-	"github.com/jmeacham/speclib/internal/lockfile"
-	"github.com/jmeacham/speclib/internal/manifest"
-	"github.com/jmeacham/speclib/internal/paths"
-	"github.com/jmeacham/speclib/internal/syncplan"
+	"github.com/jacob-meacham/speclib/internal/agent"
+	"github.com/jacob-meacham/speclib/internal/fingerprint"
+	"github.com/jacob-meacham/speclib/internal/lockfile"
+	"github.com/jacob-meacham/speclib/internal/manifest"
+	"github.com/jacob-meacham/speclib/internal/paths"
+	"github.com/jacob-meacham/speclib/internal/syncplan"
 	"github.com/spf13/cobra"
 )
 

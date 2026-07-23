@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/jmeacham/speclib/internal/scaffold"
+	"github.com/jacob-meacham/speclib/internal/scaffold"
 	"github.com/spf13/cobra"
 )
 

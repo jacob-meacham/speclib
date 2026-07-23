@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jmeacham/speclib/internal/manifest"
-	"github.com/jmeacham/speclib/internal/spec"
+	"github.com/jacob-meacham/speclib/internal/manifest"
+	"github.com/jacob-meacham/speclib/internal/spec"
 )
 
 type Resolved struct {

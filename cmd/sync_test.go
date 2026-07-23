@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jmeacham/speclib/internal/agent"
-	"github.com/jmeacham/speclib/internal/fingerprint"
-	"github.com/jmeacham/speclib/internal/lockfile"
-	"github.com/jmeacham/speclib/internal/manifest"
+	"github.com/jacob-meacham/speclib/internal/agent"
+	"github.com/jacob-meacham/speclib/internal/fingerprint"
+	"github.com/jacob-meacham/speclib/internal/lockfile"
+	"github.com/jacob-meacham/speclib/internal/manifest"
 	"github.com/stretchr/testify/require"
 )
 

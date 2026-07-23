@@ -3,10 +3,10 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/jmeacham/speclib/internal/lockfile"
-	"github.com/jmeacham/speclib/internal/manifest"
-	"github.com/jmeacham/speclib/internal/paths"
-	"github.com/jmeacham/speclib/internal/source"
+	"github.com/jacob-meacham/speclib/internal/lockfile"
+	"github.com/jacob-meacham/speclib/internal/manifest"
+	"github.com/jacob-meacham/speclib/internal/paths"
+	"github.com/jacob-meacham/speclib/internal/source"
 	"github.com/spf13/cobra"
 )
 

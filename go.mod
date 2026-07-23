@@ -1,4 +1,4 @@
-module github.com/jmeacham/speclib
+module github.com/jacob-meacham/speclib
 
 go 1.25.5
 

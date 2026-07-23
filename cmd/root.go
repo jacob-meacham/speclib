@@ -3,7 +3,7 @@ package cmd
 import (
 	"os"
 
-	"github.com/jmeacham/speclib/internal/agent"
+	"github.com/jacob-meacham/speclib/internal/agent"
 	"github.com/spf13/cobra"
 )
 

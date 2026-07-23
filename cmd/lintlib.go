@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jmeacham/speclib/internal/manifest"
-	"github.com/jmeacham/speclib/internal/paths"
+	"github.com/jacob-meacham/speclib/internal/manifest"
+	"github.com/jacob-meacham/speclib/internal/paths"
 )
 
 // lintResult is the outcome of validating the spec-library manifest and

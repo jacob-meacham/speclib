@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/jmeacham/speclib/cmd"
+	"github.com/jacob-meacham/speclib/cmd"
 )
 
 func main() {

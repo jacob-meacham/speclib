@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jmeacham/speclib/internal/lockfile"
-	"github.com/jmeacham/speclib/internal/manifest"
-	"github.com/jmeacham/speclib/internal/spec"
+	"github.com/jacob-meacham/speclib/internal/lockfile"
+	"github.com/jacob-meacham/speclib/internal/manifest"
+	"github.com/jacob-meacham/speclib/internal/spec"
 	"github.com/stretchr/testify/require"
 )
 

@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jmeacham/speclib/internal/lockfile"
+	"github.com/jacob-meacham/speclib/internal/lockfile"
 	"github.com/stretchr/testify/require"
 )
 

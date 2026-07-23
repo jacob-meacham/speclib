@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os/exec"
 
-	"github.com/jmeacham/speclib/internal/lockfile"
-	"github.com/jmeacham/speclib/internal/paths"
+	"github.com/jacob-meacham/speclib/internal/lockfile"
+	"github.com/jacob-meacham/speclib/internal/paths"
 	"github.com/spf13/cobra"
 )
 
