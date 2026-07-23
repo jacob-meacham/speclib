@@ -7,16 +7,15 @@ builds:
     binary: speclib
     env:
       - CGO_ENABLED=0
-    goos: [linux, darwin, windows]
+    # No windows: internal/source's mirror lock uses syscall.Flock, which has
+    # no Windows equivalent short of a LockFileEx port. Add when someone needs it.
+    goos: [linux, darwin]
     goarch: [amd64, arm64]
     ldflags:
       - -s -w -X github.com/jacob-meacham/speclib/cmd.version={{.Version}}
 
 archives:
   - formats: [tar.gz]
-    format_overrides:
-      - goos: windows
-        formats: [zip]
 
 checksum:
   name_template: checksums.txt
