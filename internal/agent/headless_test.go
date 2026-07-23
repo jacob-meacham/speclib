@@ -28,3 +28,19 @@ func TestParseResultLineNoMatchReturnsEmpty(t *testing.T) {
 	require.Empty(t, tc)
 	require.Empty(t, fs)
 }
+
+func TestBuildPromptIncludesChecksInOrder(t *testing.T) {
+	p := buildPrompt(Request{
+		SpecDir: ".speclib/work/demo", Language: "go", TargetPath: "gen/demo",
+		Checks: []string{"go build ./...", "go vet ./..."},
+	})
+	require.Contains(t, p, "go build ./...; go vet ./...")
+	require.Contains(t, p, "exits 0")
+	require.Contains(t, p, "RESULT <test-command> || <pass|skip|fail>")
+}
+
+func TestBuildPromptOmitsChecksWhenUndeclared(t *testing.T) {
+	p := buildPrompt(Request{SpecDir: "s", Language: "go", TargetPath: "t"})
+	require.NotContains(t, p, "exits 0")
+	require.Contains(t, p, "RESULT <test-command> || <pass|skip|fail>")
+}

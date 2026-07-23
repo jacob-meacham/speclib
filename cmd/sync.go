@@ -170,7 +170,7 @@ func runHeadless(cmd *cobra.Command, only string, backend agent.Backend) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "Generating %s...\n", p.Name)
 		res, err := backend.Generate(context.Background(), agent.Request{
 			Name: item.Name, TargetPath: item.TargetPath, Language: item.Language,
-			ContextFile: item.ContextFile, SpecDir: item.SpecDir,
+			ContextFile: item.ContextFile, SpecDir: item.SpecDir, Checks: item.Checks,
 		})
 		if err != nil {
 			return fmt.Errorf("generate %s: %w", p.Name, err)

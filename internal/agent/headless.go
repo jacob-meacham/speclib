@@ -12,12 +12,7 @@ import (
 type HeadlessClaude struct{}
 
 func (HeadlessClaude) Generate(ctx context.Context, req Request) (Result, error) {
-	prompt := fmt.Sprintf(
-		"Read the spec in %s (PROMPT.md, SPEC.md, fixtures). Generate a %s "+
-			"implementation into %s, write a fixture-driven test, run it until it "+
-			"passes, then print a final line exactly: RESULT <test-command> || <pass|skip|fail>.",
-		req.SpecDir, req.Language, req.TargetPath)
-	cmd := exec.CommandContext(ctx, "claude", "-p", prompt)
+	cmd := exec.CommandContext(ctx, "claude", "-p", buildPrompt(req))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return Result{}, fmt.Errorf("claude: %v: %s", err, string(out))
@@ -27,6 +22,22 @@ func (HeadlessClaude) Generate(ctx context.Context, req Request) (Result, error)
 		return Result{}, fmt.Errorf("could not parse RESULT line from agent output")
 	}
 	return Result{TestCommand: tc, FixtureStatus: fs}, nil
+}
+
+// buildPrompt renders the headless generation prompt. Kept separate from
+// Generate so the prompt contract is testable without spawning claude.
+func buildPrompt(req Request) string {
+	checks := ""
+	if len(req.Checks) > 0 {
+		checks = fmt.Sprintf(" Before writing the test, run each project check"+
+			" in order and fix failures until every one exits 0: %s.",
+			strings.Join(req.Checks, "; "))
+	}
+	return fmt.Sprintf(
+		"Read the spec in %s (PROMPT.md, SPEC.md, fixtures). Generate a %s "+
+			"implementation into %s.%s Write a fixture-driven test, run it until it "+
+			"passes, then print a final line exactly: RESULT <test-command> || <pass|skip|fail>.",
+		req.SpecDir, req.Language, req.TargetPath, checks)
 }
 
 func parseResultLine(out string) (testCmd, fixtureStatus string) {

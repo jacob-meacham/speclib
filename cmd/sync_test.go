@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -177,6 +178,32 @@ func TestSyncPlanAndRecordAreMutuallyExclusive(t *testing.T) {
 
 	_, err := runSyncWithStub(t, dir, "sync", "--plan", "--record", "demo")
 	require.Error(t, err)
+}
+
+// recordingBackend captures the Request runHeadless hands to the backend so
+// the plan-item -> Request threading is provable without running claude.
+type recordingBackend struct {
+	got *agent.Request
+}
+
+func (r *recordingBackend) Generate(ctx context.Context, req agent.Request) (agent.Result, error) {
+	*r.got = req
+	return agent.StubBackend{}.Generate(ctx, req)
+}
+
+func TestSyncHeadlessPassesChecksToBackend(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir, "go build ./...", "go vet ./...")
+
+	var got agent.Request
+	root := newRootCmdWithBackend(&recordingBackend{got: &got})
+	var out strings.Builder
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"--chdir", dir, "sync"})
+	require.NoError(t, root.Execute())
+
+	require.Equal(t, []string{"go build ./...", "go vet ./..."}, got.Checks)
 }
 
 func TestSyncHeadlessGeneratesAndRecords(t *testing.T) {

@@ -12,6 +12,7 @@ type Request struct {
 	Language    string
 	ContextFile string
 	SpecDir     string
+	Checks      []string
 }
 
 type Result struct {
