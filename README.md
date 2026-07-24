@@ -6,24 +6,18 @@ driving a coding agent.
 
 ## Install
 
-With Go:
-
 ```sh
-go install github.com/jacob-meacham/speclib@latest
+curl -fsSL https://raw.githubusercontent.com/jacob-meacham/speclib/main/install.sh | sh
 ```
 
-Or grab a prebuilt binary from the
-[releases page](https://github.com/jacob-meacham/speclib/releases) — e.g. for
-Linux on amd64:
+This detects your platform, verifies the release checksum, and installs the
+latest binary to `/usr/local/bin` (using sudo only if that isn't writable).
+Set `SPECLIB_INSTALL_DIR` to install elsewhere, or `SPECLIB_VERSION` to pin a
+version.
 
-```sh
-curl -sL https://github.com/jacob-meacham/speclib/releases/download/v0.1.0/speclib_0.1.0_linux_amd64.tar.gz \
-  | tar xz speclib
-./speclib --version
-```
-
-Binaries are published for Linux and macOS (amd64 and arm64). Building from
-source works anywhere Go does: `go build .` in a checkout.
+Alternatives: `go install github.com/jacob-meacham/speclib@latest`, a manual
+download from the [releases page](https://github.com/jacob-meacham/speclib/releases)
+(Linux and macOS, amd64 and arm64), or `go build .` in a checkout.
 
 ## Quick start
 

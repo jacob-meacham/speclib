@@ -21,3 +21,22 @@ jobs:
         run: go build ./...
       - name: test
         run: go test ./...
+
+  installer:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: shellcheck
+        if: runner.os == 'Linux'
+        run: shellcheck install.sh
+      - name: install latest release
+        run: |
+          SPECLIB_INSTALL_DIR="$RUNNER_TEMP/bin" sh install.sh
+          "$RUNNER_TEMP/bin/speclib" --version
+      - name: install pinned release
+        run: |
+          SPECLIB_VERSION=0.1.0 SPECLIB_INSTALL_DIR="$RUNNER_TEMP/bin2" sh install.sh
+          test "$("$RUNNER_TEMP/bin2/speclib" --version)" = "speclib version 0.1.0"
