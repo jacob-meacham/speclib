@@ -38,8 +38,9 @@ if [ -z "$version" ]; then
     latest_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest") \
         || fail "could not resolve the latest release of $REPO"
     version="${latest_url##*/}"
-    [ "$version" != "latest" ] && [ -n "$version" ] \
-        || fail "could not parse a release tag from $latest_url (no releases yet?)"
+    if [ -z "$version" ] || [ "$version" = "latest" ]; then
+        fail "could not parse a release tag from $latest_url (no releases yet?)"
+    fi
 fi
 version="${version#v}"
 
