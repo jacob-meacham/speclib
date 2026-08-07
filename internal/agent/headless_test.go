@@ -1,10 +1,72 @@
 package agent
 
 import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+// writeFakeClaude installs a scripted `claude` at the front of PATH. The
+// real claude must never run in tests; every headless test goes through a
+// fake like this.
+func writeFakeClaude(t *testing.T, script string) {
+	t.Helper()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "claude"), []byte("#!/bin/sh\n"+script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestHeadlessGenerateStreamsProgressAndParsesResult(t *testing.T) {
+	writeFakeClaude(t, `
+echo '{"type":"system","subtype":"init"}'
+echo '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"gen/demo/demo.go"}}]}}'
+echo '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"go test ./gen/demo"}}]}}'
+printf '{"type":"result","subtype":"success","result":"done\\nRESULT go test ./gen/demo || pass"}\n'
+`)
+	var progress strings.Builder
+	h := HeadlessClaude{Progress: &progress}
+	res, err := h.Generate(context.Background(), Request{SpecDir: "s", Language: "go", TargetPath: "t"})
+	require.NoError(t, err)
+	require.Equal(t, Result{TestCommand: "go test ./gen/demo", FixtureStatus: "pass"}, res)
+	require.Equal(t, "  [tool] Write gen/demo/demo.go\n  [tool] Bash: go test ./gen/demo\n", progress.String())
+}
+
+func TestHeadlessGenerateTimesOut(t *testing.T) {
+	writeFakeClaude(t, "sleep 5\n")
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	_, err := HeadlessClaude{}.Generate(ctx, Request{SpecDir: "s", Language: "go", TargetPath: "t"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "timed out")
+}
+
+func TestHeadlessGenerateNoResultLineErrorsWithTail(t *testing.T) {
+	writeFakeClaude(t, `
+echo '{"type":"result","subtype":"success","result":"I could not finish"}'
+`)
+	_, err := HeadlessClaude{}.Generate(context.Background(), Request{SpecDir: "s", Language: "go", TargetPath: "t"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "could not parse RESULT line")
+	require.Contains(t, err.Error(), "I could not finish")
+}
+
+func TestHeadlessGenerateMissingBinaryErrors(t *testing.T) {
+	_, err := HeadlessClaude{Adapter: Adapter{Name: "claude", Bin: "no-such-agent-xyz"}}.
+		Generate(context.Background(), Request{SpecDir: "s", Language: "go", TargetPath: "t"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no-such-agent-xyz not found on PATH")
+}
+
+func TestProgressLine(t *testing.T) {
+	require.Equal(t, "  [tool] Bash: go test", progressLine("Bash", "", "go test"))
+	require.Equal(t, "  [tool] Write a/b.go", progressLine("Write", "a/b.go", ""))
+	require.Equal(t, "  [tool] WebSearch", progressLine("WebSearch", "", ""))
+}
 
 // TestParseResultLineCommandContainingOrOr covers a test command that itself
 // contains " || " (e.g. a shell fallback like "go test ./... || echo fail").
