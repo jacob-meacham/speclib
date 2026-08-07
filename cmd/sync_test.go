@@ -251,6 +251,46 @@ func TestSyncHeadlessFailingTestCommandRecordsNothing(t *testing.T) {
 	require.Empty(t, p.GeneratedCommit, "a failing test command must not be recorded")
 }
 
+// TestSyncHeadlessNilBackendUsesManifestAgentConfig covers the backend == nil
+// branch of runHeadless — the only path where the manifest's [agent] section
+// (permissions in particular) actually reaches HeadlessClaude. Every other
+// headless test injects a stub/recording backend and never exercises this
+// wiring.
+func TestSyncHeadlessNilBackendUsesManifestAgentConfig(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir)
+
+	m, err := manifest.Load(filepath.Join(dir, "speclib.toml"))
+	require.NoError(t, err)
+	m.Agent = &manifest.Agent{Permissions: []string{"--dangerously-skip-permissions"}}
+	require.NoError(t, m.Save(filepath.Join(dir, "speclib.toml")))
+
+	argsFile := filepath.Join(dir, "args.txt")
+	t.Setenv("FAKE_ARGS", argsFile)
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "claude"),
+		[]byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$FAKE_ARGS\"\n"+
+			"printf '{\"type\":\"result\",\"result\":\"RESULT true || skip\"}\\n'\n"), 0o755))
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	root := newRootCmdWithBackend(nil)
+	var out strings.Builder
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"--chdir", dir, "sync", "--headless"})
+	require.NoError(t, root.Execute())
+
+	argv, readErr := os.ReadFile(argsFile)
+	require.NoError(t, readErr)
+	require.Contains(t, string(argv), "--dangerously-skip-permissions")
+	require.NotContains(t, string(argv), "--allowedTools")
+
+	l2, _ := lockfile.Load(filepath.Join(dir, "speclib.lock"))
+	p2, _ := l2.Find("demo")
+	require.Equal(t, "true", p2.TestCommand)
+}
+
 // stubTTY forces the interactive-TTY answer for one test.
 func stubTTY(t *testing.T, val bool) {
 	t.Helper()
@@ -334,6 +374,14 @@ func TestSyncHeadlessFlagIsExclusiveWithPlan(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestSyncHeadlessFlagIsExclusiveWithRecord(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir)
+
+	_, err := runSyncWithStub(t, dir, "sync", "--headless", "--record", "demo")
+	require.Error(t, err)
+}
+
 func TestSyncNothingPendingSkipsLaunch(t *testing.T) {
 	dir := t.TempDir()
 	setupPending(t, dir)
@@ -342,7 +390,14 @@ func TestSyncNothingPendingSkipsLaunch(t *testing.T) {
 	p, _ := l.Find("demo")
 	p.GeneratedCommit = p.Commit
 	require.NoError(t, l.Save(filepath.Join(dir, "speclib.lock")))
-	// No fake claude on PATH is needed: with nothing pending, nothing may launch.
+	// A poison claude on PATH: if the nothing-pending guard ever regresses
+	// and launches the agent anyway, this fails loudly instead of silently
+	// invoking whatever "claude" happens to be on the real PATH.
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "claude"),
+		[]byte("#!/bin/sh\necho SHOULD-NOT-RUN >&2\nexit 97\n"), 0o755))
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	out, err := runSyncWithStub(t, dir, "sync")
 	require.NoError(t, err)
