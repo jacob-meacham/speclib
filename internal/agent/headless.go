@@ -9,6 +9,8 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"syscall"
+	"time"
 )
 
 // HeadlessClaude drives generation non-interactively via the adapter's print
@@ -53,6 +55,9 @@ func (h HeadlessClaude) Generate(ctx context.Context, req Request) (Result, erro
 		return Result{}, fmt.Errorf("%s not found on PATH", ad.Bin)
 	}
 	cmd := exec.CommandContext(ctx, ad.Bin, ad.HeadlessArgs(buildPrompt(req), h.Permissions)...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = 5 * time.Second
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return Result{}, err

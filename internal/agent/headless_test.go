@@ -37,12 +37,14 @@ printf '{"type":"result","subtype":"success","result":"done\\nRESULT go test ./g
 }
 
 func TestHeadlessGenerateTimesOut(t *testing.T) {
-	writeFakeClaude(t, "sleep 5\n")
+	writeFakeClaude(t, "sleep 5 &\nsleep 5\n")
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
+	start := time.Now()
 	_, err := HeadlessClaude{}.Generate(ctx, Request{SpecDir: "s", Language: "go", TargetPath: "t"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "timed out")
+	require.Less(t, time.Since(start), 2*time.Second, "timeout must bound wall-clock time")
 }
 
 func TestHeadlessGenerateNoResultLineErrorsWithTail(t *testing.T) {
