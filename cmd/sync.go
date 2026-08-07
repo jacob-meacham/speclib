@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"syscall"
 	"time"
 
 	"github.com/jacob-meacham/speclib/internal/agent"
@@ -264,7 +265,16 @@ func runHeadless(cmd *cobra.Command, only string, backend agent.Backend, timeout
 		}
 		// Recording gate: never trust the agent's claim alone. Re-run the
 		// reported test command; a sync whose test fails records nothing.
-		if out, testErr := exec.Command("sh", "-c", res.TestCommand).CombinedOutput(); testErr != nil {
+		// Bound it with the same timeout and process-group hygiene as the
+		// generation call itself, so a hung test command can't hang sync.
+		tctx, tcancel := context.WithTimeout(context.Background(), timeout)
+		tc := exec.CommandContext(tctx, "sh", "-c", res.TestCommand)
+		tc.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		tc.Cancel = func() error { return syscall.Kill(-tc.Process.Pid, syscall.SIGKILL) }
+		tc.WaitDelay = 5 * time.Second
+		out, testErr := tc.CombinedOutput()
+		tcancel()
+		if testErr != nil {
 			return fmt.Errorf("%s: generated, but test command %q failed — nothing recorded: %v\n%s",
 				p.Name, res.TestCommand, testErr, out)
 		}
