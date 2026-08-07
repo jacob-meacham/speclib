@@ -21,8 +21,18 @@ type Project struct {
 	Checks   []string `toml:"checks,omitempty"`
 }
 
+// Agent configures which coding agent drives generation and, for headless
+// sync, the permission args its print mode is launched with. A nil Agent (no
+// [agent] section) means the defaults: the claude adapter with its built-in
+// permission allowlist.
+type Agent struct {
+	Command     string   `toml:"command,omitempty"`
+	Permissions []string `toml:"permissions,omitempty"`
+}
+
 type Manifest struct {
 	Project      Project               `toml:"project"`
+	Agent        *Agent                `toml:"agent,omitempty"`
 	Dependencies map[string]Dependency `toml:"dependencies"`
 }
 
@@ -57,6 +67,24 @@ func (m *Manifest) LanguageFor(dep string) string {
 		return d.Language
 	}
 	return m.Project.Language
+}
+
+// AgentCommand returns the configured [agent].command, or "" (the default
+// adapter) when the section is absent.
+func (m *Manifest) AgentCommand() string {
+	if m.Agent == nil {
+		return ""
+	}
+	return m.Agent.Command
+}
+
+// AgentPermissions returns the configured [agent].permissions, or nil (use
+// the adapter's defaults) when the section is absent.
+func (m *Manifest) AgentPermissions() []string {
+	if m.Agent == nil {
+		return nil
+	}
+	return m.Agent.Permissions
 }
 
 type LibraryMeta struct {

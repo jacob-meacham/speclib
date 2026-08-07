@@ -116,3 +116,12 @@ func TestWriteClaudeAgentStillWorks(t *testing.T) {
 	require.NoError(t, WriteClaudeAgent(dir))
 	require.FileExists(t, filepath.Join(dir, ".claude", "skills", "speclib-sync", "SKILL.md"))
 }
+
+func TestWriteManifestIncludesAgentExample(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, WriteManifest(dir))
+	data, err := os.ReadFile(filepath.Join(dir, "speclib.toml"))
+	require.NoError(t, err)
+	require.Contains(t, string(data), "# [agent]")
+	require.Contains(t, string(data), `# permissions = ["--allowedTools", "Write,Edit,Bash"]`)
+}

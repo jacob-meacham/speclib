@@ -9,3 +9,11 @@ language = ""
 # Declare spec-library dependencies with `speclib add <source> --path <dir>`,
 # then generate their code with `speclib sync`.
 [dependencies]
+
+# Which coding agent drives `speclib sync` and, in --headless mode, the
+# permission args its print mode gets. These are the defaults; permissions
+# replaces the adapter's default args verbatim (e.g. a tighter allowlist, or
+# ["--dangerously-skip-permissions"] inside sandboxed CI).
+# [agent]
+# command = "claude"
+# permissions = ["--allowedTools", "Write,Edit,Bash"]
