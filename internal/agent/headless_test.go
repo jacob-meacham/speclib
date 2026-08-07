@@ -57,6 +57,25 @@ echo '{"type":"result","subtype":"success","result":"I could not finish"}'
 	require.Contains(t, err.Error(), "I could not finish")
 }
 
+// TestHeadlessGenerateScanErrorKillsProcessAndErrors covers a scan failure
+// (e.g. bufio.ErrTooLong from a line past the scanner's max buffer) that
+// previously fell through the loop silently and surfaced as a misleading
+// timeout or "could not parse RESULT line" error. It must instead be
+// reported for what it is, and the child process group must be killed
+// promptly rather than left to the trailing sleep below.
+func TestHeadlessGenerateScanErrorKillsProcessAndErrors(t *testing.T) {
+	writeFakeClaude(t, `
+dd if=/dev/zero bs=11000000 count=1 2>/dev/null | tr '\0' 'a'
+echo
+sleep 5
+`)
+	start := time.Now()
+	_, err := HeadlessClaude{}.Generate(context.Background(), Request{SpecDir: "s", Language: "go", TargetPath: "t"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "reading claude output")
+	require.Less(t, time.Since(start), 3*time.Second, "a scan error must kill the process promptly, not wait out the trailing sleep")
+}
+
 func TestHeadlessGenerateMissingBinaryErrors(t *testing.T) {
 	_, err := HeadlessClaude{Adapter: Adapter{Name: "claude", Bin: "no-such-agent-xyz"}}.
 		Generate(context.Background(), Request{SpecDir: "s", Language: "go", TargetPath: "t"})

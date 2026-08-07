@@ -97,6 +97,11 @@ func (h HeadlessClaude) Generate(ctx context.Context, req Request) (Result, erro
 			resultText = ev.Result
 		}
 	}
+	if scanErr := sc.Err(); scanErr != nil {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		_ = cmd.Wait()
+		return Result{}, fmt.Errorf("reading %s output: %v; last output:\n%s", ad.Bin, scanErr, transcriptTail(tail, &stderr))
+	}
 	waitErr := cmd.Wait()
 	if ctx.Err() != nil {
 		return Result{}, fmt.Errorf("%s timed out; last output:\n%s", ad.Bin, transcriptTail(tail, &stderr))
