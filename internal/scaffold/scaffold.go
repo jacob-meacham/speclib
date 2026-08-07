@@ -76,6 +76,15 @@ func WriteManifest(dir string) error {
 // wrapped in its own frontmatter and dropped at its own conventional path.
 const syncInstructionsPath = "templates/sync-instructions.md"
 
+// SyncInstructions returns the canonical speclib-sync workflow body all agent
+// integrations share. The interactive `speclib sync` handoff passes it as the
+// agent's initial prompt, so the flow works even when no integration file was
+// ever installed.
+func SyncInstructions() (string, error) {
+	raw, err := templates.ReadFile(syncInstructionsPath)
+	return string(raw), err
+}
+
 // SupportedAgents lists the values accepted by WriteAgent (and `speclib init
 // --agent`).
 var SupportedAgents = []string{"claude", "cursor", "agents"}
@@ -108,11 +117,10 @@ const agentsSectionHeading = "## speclib"
 //   - agents -> AGENTS.md at dir's root (plain markdown, appended
 //     idempotently under a "## speclib" section)
 func WriteAgent(dir, agent string) error {
-	raw, err := templates.ReadFile(syncInstructionsPath)
+	body, err := SyncInstructions()
 	if err != nil {
 		return err
 	}
-	body := string(raw)
 
 	switch agent {
 	case "claude":

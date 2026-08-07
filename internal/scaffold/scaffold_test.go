@@ -125,3 +125,10 @@ func TestWriteManifestIncludesAgentExample(t *testing.T) {
 	require.Contains(t, string(data), "# [agent]")
 	require.Contains(t, string(data), `# permissions = ["--allowedTools", "Write,Edit,Bash"]`)
 }
+
+func TestSyncInstructionsExposesCanonicalBody(t *testing.T) {
+	body, err := SyncInstructions()
+	require.NoError(t, err)
+	require.Contains(t, body, "speclib sync --plan --json")
+	require.Contains(t, body, "speclib sync --record")
+}
