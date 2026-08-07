@@ -34,9 +34,10 @@ Consuming spec-libraries:
 - `speclib add <source>[@<version>] --path <dir> [--lang L] [--context F]` —
   add a dependency (resolution only; does not generate).
 - `speclib lock` — resolve any unresolved manifest dependencies.
-- `speclib sync [dep]` — generate code for pending dependencies, one at a time.
-  Inside Claude Code, the installed skill drives this interactively; the CLI
-  exposes `sync --plan` / `sync --record` as its plumbing.
+- `speclib sync [dep]` — generate code for pending dependencies. On a
+  terminal it launches your coding agent's own UI preloaded with the sync
+  instructions; `--headless` generates non-interactively for CI. The CLI
+  exposes `sync --plan` / `sync --record` as the plumbing agents drive.
 - `speclib update [dep] [--to <version>]` — re-resolve to newer versions.
 - `speclib verify [dep]` — re-run recorded fixture tests (LLM-free,
   CI-friendly).

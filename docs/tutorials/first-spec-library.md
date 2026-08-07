@@ -147,11 +147,12 @@ $ speclib sync --plan
 slugify-spec -> src/slugify (python); spec in .speclib/work/slugify-spec
 ```
 
-Now generate. Inside Claude Code, say **"sync my speclib dependencies"** — the
-installed skill reads the plan, generates the implementation into
-`src/slugify/` adapted to your project's conventions, runs your declared
-`checks` until clean, writes a fixture-driven test and runs it until it
-passes, then records provenance. For slugify the generated code looks like:
+Now generate. Run `speclib sync` — it launches Claude Code preloaded with the
+sync instructions. You watch generation live, answer any questions it asks,
+and it records provenance as it finishes each dependency. (Equivalently, open
+Claude Code yourself and say **"sync my speclib dependencies"** — the
+installed skill follows the same instructions.) For slugify the generated
+code looks like:
 
 ```python
 # Generated from slugify-spec v0.1.0 by speclib.
@@ -178,6 +179,15 @@ Recorded slugify-spec.
 
 Generated code is checked in — commit `src/slugify/`, `speclib.toml`, and
 `speclib.lock` together.
+
+### Headless (CI)
+
+`speclib sync --headless` generates without a UI: the agent runs in print
+mode with the adapter's default permissions (`--allowedTools Write,Edit,Bash`
+for claude — override via the `[agent]` section in `speclib.toml`), streams
+one-line tool progress to stderr, and times out per dependency after 15
+minutes (`--timeout`). Before recording, speclib re-runs the reported test
+command itself; a failing test records nothing.
 
 ## Part 3 — Verify, forever, without an LLM
 
