@@ -3,7 +3,9 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"time"
 
@@ -12,12 +14,26 @@ import (
 	"github.com/jacob-meacham/speclib/internal/lockfile"
 	"github.com/jacob-meacham/speclib/internal/manifest"
 	"github.com/jacob-meacham/speclib/internal/paths"
+	"github.com/jacob-meacham/speclib/internal/scaffold"
 	"github.com/jacob-meacham/speclib/internal/syncplan"
 	"github.com/spf13/cobra"
 )
 
+// isInteractiveTTY reports whether both stdin and stdout are terminals — the
+// gate for handing off to the agent's interactive UI. Swappable in tests.
+var isInteractiveTTY = func() bool {
+	for _, f := range []*os.File{os.Stdin, os.Stdout} {
+		info, err := f.Stat()
+		if err != nil || info.Mode()&os.ModeCharDevice == 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func newSyncCmd(backend agent.Backend) *cobra.Command {
-	var plan, asJSON bool
+	var plan, asJSON, headless bool
+	var timeout time.Duration
 	var record, testCmd, fixtureStatus, generatedCommit, selections string
 	cmd := &cobra.Command{
 		Use:   "sync [dep]",
@@ -33,19 +49,26 @@ func newSyncCmd(backend agent.Backend) *cobra.Command {
 				return runRecord(cmd, record, testCmd, fixtureStatus, generatedCommit, selections)
 			case plan:
 				return runPlan(cmd, only, asJSON)
+			case headless:
+				return runHeadless(cmd, only, backend, timeout)
 			default:
-				return runHeadless(cmd, only, backend)
+				if !isInteractiveTTY() {
+					return errors.New("not a terminal; pass --headless for non-interactive use")
+				}
+				return runInteractive(cmd, only)
 			}
 		},
 	}
 	cmd.Flags().BoolVar(&plan, "plan", false, "print the work plan and materialize specs (no generation)")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "with --plan, emit JSON")
+	cmd.Flags().BoolVar(&headless, "headless", false, "generate non-interactively via the agent's print mode (for CI)")
+	cmd.Flags().DurationVar(&timeout, "timeout", 15*time.Minute, "with --headless, per-dependency generation timeout")
 	cmd.Flags().StringVar(&record, "record", "", "record generation provenance for this dependency")
 	cmd.Flags().StringVar(&testCmd, "test-command", "", "with --record, the test command to re-run in verify")
 	cmd.Flags().StringVar(&fixtureStatus, "fixture-status", "pass", "with --record: pass|skip|fail")
 	cmd.Flags().StringVar(&generatedCommit, "generated-commit", "", "with --record: spec commit generated from (defaults to resolved commit)")
 	cmd.Flags().StringVar(&selections, "selections", "", "with --record: generation choices to honor on future upgrades")
-	cmd.MarkFlagsMutuallyExclusive("plan", "record")
+	cmd.MarkFlagsMutuallyExclusive("plan", "record", "headless")
 	return cmd
 }
 
@@ -145,7 +168,11 @@ func runRecord(cmd *cobra.Command, name, testCmd, fixtureStatus, generatedCommit
 	return nil
 }
 
-func runHeadless(cmd *cobra.Command, only string, backend agent.Backend) error {
+// runInteractive materializes every pending spec, then hands the terminal to
+// the agent's own UI — full streaming, permission prompts, and questions —
+// seeded with the canonical sync instructions. Recording happens inside the
+// session via `speclib sync --record`, exactly as the installed skill does.
+func runInteractive(cmd *cobra.Command, only string) error {
 	m, l, err := loadState()
 	if err != nil {
 		return err
@@ -163,16 +190,75 @@ func runHeadless(cmd *cobra.Command, only string, backend agent.Backend) error {
 		fmt.Fprintln(cmd.OutOrStdout(), "Nothing to sync.")
 		return nil
 	}
+	names := make([]string, 0, len(pending))
+	for _, p := range pending {
+		if _, err := syncplan.Materialize(paths.WorkDir, m.Dependencies[p.Name], p, m.Project.Checks); err != nil {
+			return err
+		}
+		names = append(names, p.Name)
+	}
+	ad, err := agent.Lookup(m.AgentCommand())
+	if err != nil {
+		return err
+	}
+	instructions, err := scaffold.SyncInstructions()
+	if err != nil {
+		return err
+	}
+	if only != "" {
+		instructions += fmt.Sprintf("\n\nSync only the dependency named %q.", only)
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Launching %s for %d pending dependency(ies)...\n", ad.Bin, len(pending))
+	runErr := ad.LaunchInteractive(instructions, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+	// Partial progress is durable (--record ran inside the session), so
+	// summarize per-dependency state even when the session exited nonzero.
+	if l2, loadErr := lockfile.Load(paths.Lock); loadErr == nil {
+		for _, name := range names {
+			if p, ok := l2.Find(name); ok {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", name, p.State())
+			}
+		}
+	}
+	return runErr
+}
+
+func runHeadless(cmd *cobra.Command, only string, backend agent.Backend, timeout time.Duration) error {
+	m, l, err := loadState()
+	if err != nil {
+		return err
+	}
+	pending, err := syncplan.Compute(m, l, only)
+	if err != nil {
+		return err
+	}
+	if len(pending) == 0 {
+		if only != "" {
+			if err := requireKnownDep(m, l, only); err != nil {
+				return err
+			}
+		}
+		fmt.Fprintln(cmd.OutOrStdout(), "Nothing to sync.")
+		return nil
+	}
+	if backend == nil {
+		ad, err := agent.Lookup(m.AgentCommand())
+		if err != nil {
+			return err
+		}
+		backend = agent.HeadlessClaude{Adapter: ad, Permissions: m.AgentPermissions(), Progress: cmd.ErrOrStderr()}
+	}
 	for _, p := range pending {
 		item, err := syncplan.Materialize(paths.WorkDir, m.Dependencies[p.Name], p, m.Project.Checks)
 		if err != nil {
 			return err
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "Generating %s...\n", p.Name)
-		res, err := backend.Generate(context.Background(), agent.Request{
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		res, err := backend.Generate(ctx, agent.Request{
 			Name: item.Name, TargetPath: item.TargetPath, Language: item.Language,
 			ContextFile: item.ContextFile, SpecDir: item.SpecDir, Checks: item.Checks,
 		})
+		cancel()
 		if err != nil {
 			return fmt.Errorf("generate %s: %w", p.Name, err)
 		}

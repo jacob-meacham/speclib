@@ -23,7 +23,7 @@ func TestEndToEndRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, out, "pending")
 
-	_, err = runSyncWithStub(t, dir, "sync")
+	_, err = runSyncWithStub(t, dir, "sync", "--headless")
 	require.NoError(t, err)
 	require.FileExists(t, filepath.Join(dir, "gen", "demo", "GENERATED.md"))
 
@@ -37,7 +37,7 @@ func TestEndToEndRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 
 	// second sync is a no-op
-	out, err = runSyncWithStub(t, dir, "sync")
+	out, err = runSyncWithStub(t, dir, "sync", "--headless")
 	require.NoError(t, err)
 	require.Contains(t, out, "Nothing to sync")
 }

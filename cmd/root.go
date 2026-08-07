@@ -14,7 +14,9 @@ var chdir string
 var version = "0.0.0-dev"
 
 func newRootCmd() *cobra.Command {
-	return newRootCmdWithBackend(agent.HeadlessClaude{})
+	// nil backend: sync --headless builds the configured HeadlessClaude from
+	// the manifest's [agent] section at run time. Tests inject stubs here.
+	return newRootCmdWithBackend(nil)
 }
 
 func newRootCmdWithBackend(backend agent.Backend) *cobra.Command {

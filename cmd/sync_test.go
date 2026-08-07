@@ -152,7 +152,7 @@ func TestSyncHeadlessUnknownDepErrors(t *testing.T) {
 	dir := t.TempDir()
 	setupPending(t, dir)
 
-	_, err := runSyncWithStub(t, dir, "sync", "nonexistent")
+	_, err := runSyncWithStub(t, dir, "sync", "--headless", "nonexistent")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no such dependency: nonexistent")
 }
@@ -200,7 +200,7 @@ func TestSyncHeadlessPassesChecksToBackend(t *testing.T) {
 	var out strings.Builder
 	root.SetOut(&out)
 	root.SetErr(&out)
-	root.SetArgs([]string{"--chdir", dir, "sync"})
+	root.SetArgs([]string{"--chdir", dir, "sync", "--headless"})
 	require.NoError(t, root.Execute())
 
 	require.Equal(t, []string{"go build ./...", "go vet ./..."}, got.Checks)
@@ -210,7 +210,7 @@ func TestSyncHeadlessGeneratesAndRecords(t *testing.T) {
 	dir := t.TempDir()
 	setupPending(t, dir)
 
-	_, err := runSyncWithStub(t, dir, "sync")
+	_, err := runSyncWithStub(t, dir, "sync", "--headless")
 	require.NoError(t, err)
 
 	l, _ := lockfile.Load(filepath.Join(dir, "speclib.lock"))
@@ -240,7 +240,7 @@ func TestSyncHeadlessFailingTestCommandRecordsNothing(t *testing.T) {
 	var out strings.Builder
 	root.SetOut(&out)
 	root.SetErr(&out)
-	root.SetArgs([]string{"--chdir", dir, "sync"})
+	root.SetArgs([]string{"--chdir", dir, "sync", "--headless"})
 	err := root.Execute()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), `test command "false" failed`)
@@ -249,4 +249,102 @@ func TestSyncHeadlessFailingTestCommandRecordsNothing(t *testing.T) {
 	l, _ := lockfile.Load(filepath.Join(dir, "speclib.lock"))
 	p, _ := l.Find("demo")
 	require.Empty(t, p.GeneratedCommit, "a failing test command must not be recorded")
+}
+
+// stubTTY forces the interactive-TTY answer for one test.
+func stubTTY(t *testing.T, val bool) {
+	t.Helper()
+	old := isInteractiveTTY
+	isInteractiveTTY = func() bool { return val }
+	t.Cleanup(func() { isInteractiveTTY = old })
+}
+
+func TestSyncNonTTYWithoutHeadlessErrors(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir)
+	stubTTY(t, false)
+
+	_, err := runSyncWithStub(t, dir, "sync")
+	require.Error(t, err)
+	require.Equal(t, "not a terminal; pass --headless for non-interactive use", err.Error())
+}
+
+func TestSyncInteractiveLaunchesAgentAndSummarizes(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir)
+	stubTTY(t, true)
+	argsFile := filepath.Join(dir, "args.txt")
+	t.Setenv("FAKE_ARGS", argsFile)
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "claude"),
+		[]byte("#!/bin/sh\nprintf '%s' \"$1\" > \"$FAKE_ARGS\"\n"), 0o755))
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	out, err := runSyncWithStub(t, dir, "sync")
+	require.NoError(t, err)
+
+	instructions, readErr := os.ReadFile(argsFile)
+	require.NoError(t, readErr)
+	require.Contains(t, string(instructions), "speclib sync --plan --json")
+	require.Contains(t, out, "Launching claude for 1 pending dependency(ies)...")
+	require.Contains(t, out, "demo: pending") // the fake agent recorded nothing
+	require.FileExists(t, filepath.Join(dir, ".speclib", "work", "demo", "SPEC.md"))
+}
+
+func TestSyncInteractiveSingleDepAppendsOnlyInstruction(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir)
+	stubTTY(t, true)
+	argsFile := filepath.Join(dir, "args.txt")
+	t.Setenv("FAKE_ARGS", argsFile)
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "claude"),
+		[]byte("#!/bin/sh\nprintf '%s' \"$1\" > \"$FAKE_ARGS\"\n"), 0o755))
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	_, err := runSyncWithStub(t, dir, "sync", "demo")
+	require.NoError(t, err)
+	instructions, readErr := os.ReadFile(argsFile)
+	require.NoError(t, readErr)
+	require.Contains(t, string(instructions), `Sync only the dependency named "demo".`)
+}
+
+func TestSyncInteractiveNonzeroExitPropagatesAfterSummary(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir)
+	stubTTY(t, true)
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "claude"),
+		[]byte("#!/bin/sh\nexit 3\n"), 0o755))
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	out, err := runSyncWithStub(t, dir, "sync")
+	require.Error(t, err, "the agent session's failure must propagate")
+	require.Contains(t, out, "demo: pending", "the summary must still print on failure")
+}
+
+func TestSyncHeadlessFlagIsExclusiveWithPlan(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir)
+
+	_, err := runSyncWithStub(t, dir, "sync", "--headless", "--plan")
+	require.Error(t, err)
+}
+
+func TestSyncNothingPendingSkipsLaunch(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir)
+	stubTTY(t, true)
+	l, _ := lockfile.Load(filepath.Join(dir, "speclib.lock"))
+	p, _ := l.Find("demo")
+	p.GeneratedCommit = p.Commit
+	require.NoError(t, l.Save(filepath.Join(dir, "speclib.lock")))
+	// No fake claude on PATH is needed: with nothing pending, nothing may launch.
+
+	out, err := runSyncWithStub(t, dir, "sync")
+	require.NoError(t, err)
+	require.Contains(t, out, "Nothing to sync.")
 }
