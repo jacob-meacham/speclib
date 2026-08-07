@@ -219,3 +219,34 @@ func TestSyncHeadlessGeneratesAndRecords(t *testing.T) {
 	require.Equal(t, "true", p.TestCommand)
 	require.FileExists(t, filepath.Join(dir, "gen", "demo", "GENERATED.md"))
 }
+
+// failingTestBackend generates like the stub but reports a test command that
+// fails, which must block recording.
+type failingTestBackend struct{}
+
+func (b failingTestBackend) Generate(ctx context.Context, req agent.Request) (agent.Result, error) {
+	_, err := agent.StubBackend{}.Generate(ctx, req)
+	if err != nil {
+		return agent.Result{}, err
+	}
+	return agent.Result{TestCommand: "false", FixtureStatus: "pass"}, nil
+}
+
+func TestSyncHeadlessFailingTestCommandRecordsNothing(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir)
+
+	root := newRootCmdWithBackend(failingTestBackend{})
+	var out strings.Builder
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"--chdir", dir, "sync"})
+	err := root.Execute()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `test command "false" failed`)
+	require.Contains(t, err.Error(), "nothing recorded")
+
+	l, _ := lockfile.Load(filepath.Join(dir, "speclib.lock"))
+	p, _ := l.Find("demo")
+	require.Empty(t, p.GeneratedCommit, "a failing test command must not be recorded")
+}

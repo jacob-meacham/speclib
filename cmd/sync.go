@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os/exec"
 	"time"
 
 	"github.com/jacob-meacham/speclib/internal/agent"
@@ -174,6 +175,12 @@ func runHeadless(cmd *cobra.Command, only string, backend agent.Backend) error {
 		})
 		if err != nil {
 			return fmt.Errorf("generate %s: %w", p.Name, err)
+		}
+		// Recording gate: never trust the agent's claim alone. Re-run the
+		// reported test command; a sync whose test fails records nothing.
+		if out, testErr := exec.Command("sh", "-c", res.TestCommand).CombinedOutput(); testErr != nil {
+			return fmt.Errorf("%s: generated, but test command %q failed — nothing recorded: %v\n%s",
+				p.Name, res.TestCommand, testErr, out)
 		}
 		if err := runRecord(cmd, p.Name, res.TestCommand, res.FixtureStatus, "", ""); err != nil {
 			return err
