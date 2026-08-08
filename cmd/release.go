@@ -13,9 +13,13 @@ func newReleaseCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "release <version>",
 		Short: "Lint, then tag a release of the spec-library in the current directory",
-		Args:  cobra.ExactArgs(1),
+		Long: `Lint the spec-library in the current directory, then create git tag v<version>.
+
+The version may optionally include a leading "v": both 1.4.0 and v1.4.0
+create the tag v1.4.0.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			version := args[0]
+			version := strings.TrimPrefix(args[0], "v")
 			if _, err := semver.NewVersion(version); err != nil {
 				return fmt.Errorf("invalid version %q: not semver: %w", version, err)
 			}

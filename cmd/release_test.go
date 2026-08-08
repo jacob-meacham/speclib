@@ -45,6 +45,20 @@ func TestReleaseCreatesTag(t *testing.T) {
 	require.Contains(t, string(tagOut), "v0.1.0")
 }
 
+func TestReleaseNormalizesVPrefix(t *testing.T) {
+	dir := t.TempDir()
+	libDir := makeCommittedLib(t, dir)
+
+	out, err := runCmd(t, libDir, "release", "v0.1.0")
+	require.NoError(t, err)
+	require.Contains(t, out, "tag v0.1.0")
+
+	tagOut, err := exec.Command("git", "-C", libDir, "tag", "--list").CombinedOutput()
+	require.NoError(t, err)
+	require.Contains(t, string(tagOut), "v0.1.0")
+	require.NotContains(t, string(tagOut), "vv0.1.0")
+}
+
 func TestReleaseErrorsIfTagExists(t *testing.T) {
 	dir := t.TempDir()
 	libDir := makeCommittedLib(t, dir)
