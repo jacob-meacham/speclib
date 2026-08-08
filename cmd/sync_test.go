@@ -232,6 +232,42 @@ func (b failingTestBackend) Generate(ctx context.Context, req agent.Request) (ag
 	return agent.Result{TestCommand: "false", FixtureStatus: "pass"}, nil
 }
 
+// inSessionRecordBackend mimics the real agent: the sync instructions have it
+// record provenance itself via `speclib sync --record ... --selections ...`
+// during the session, before the driver's recording gate runs.
+type inSessionRecordBackend struct {
+	t   *testing.T
+	dir string
+}
+
+func (b inSessionRecordBackend) Generate(ctx context.Context, req agent.Request) (agent.Result, error) {
+	if _, err := (agent.StubBackend{}).Generate(ctx, req); err != nil {
+		return agent.Result{}, err
+	}
+	_, err := runSyncWithStub(b.t, b.dir, "sync", "--record", req.Name, "--test-command", "true",
+		"--selections", "language: go; flavor: minimal")
+	require.NoError(b.t, err)
+	return agent.Result{TestCommand: "true", FixtureStatus: "pass"}, nil
+}
+
+func TestSyncHeadlessGatePreservesInSessionSelections(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir)
+
+	root := newRootCmdWithBackend(inSessionRecordBackend{t: t, dir: dir})
+	var out strings.Builder
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"--chdir", dir, "sync", "--headless"})
+	require.NoError(t, root.Execute())
+
+	l, err := lockfile.Load(filepath.Join(dir, "speclib.lock"))
+	require.NoError(t, err)
+	p, ok := l.Find("demo")
+	require.True(t, ok)
+	require.Equal(t, "language: go; flavor: minimal", p.Selections)
+}
+
 func TestSyncHeadlessFailingTestCommandRecordsNothing(t *testing.T) {
 	dir := t.TempDir()
 	setupPending(t, dir)

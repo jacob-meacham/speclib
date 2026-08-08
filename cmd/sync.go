@@ -278,7 +278,16 @@ func runHeadless(cmd *cobra.Command, only string, backend agent.Backend, timeout
 			return fmt.Errorf("%s: generated, but test command %q failed — nothing recorded: %v\n%s",
 				p.Name, res.TestCommand, testErr, out)
 		}
-		if err := runRecord(cmd, p.Name, res.TestCommand, res.FixtureStatus, "", ""); err != nil {
+		// The agent records selections in-session (the sync instructions
+		// have it pass --selections); the gate re-record overwrites only
+		// what it verifies, so carry those selections forward.
+		selections := ""
+		if cur, loadErr := lockfile.Load(paths.Lock); loadErr == nil {
+			if curPkg, ok := cur.Find(p.Name); ok {
+				selections = curPkg.Selections
+			}
+		}
+		if err := runRecord(cmd, p.Name, res.TestCommand, res.FixtureStatus, "", selections); err != nil {
 			return err
 		}
 	}
