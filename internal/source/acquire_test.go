@@ -174,6 +174,29 @@ func TestAcquireAtCommitIgnoresMovedTag(t *testing.T) {
 	require.Equal(t, "spec A", string(sp.SpecDoc))
 }
 
+// TestAcquireAtCommitServesCachedCommitWithoutFetch: a pinned commit is
+// immutable, so when the mirror cache already contains it AcquireAtCommit
+// must serve reads from the cache without touching the origin. Removing the
+// origin after warming the cache makes any clone/fetch attempt fail loudly —
+// this is the regression guard for `speclib sync` silently refetching every
+// source (and hanging on a slow network) before producing any output.
+func TestAcquireAtCommitServesCachedCommitWithoutFetch(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	repo := makeRepoWithLib(t)
+	ref := Ref{Raw: repo, IsLocal: false, Location: repo}
+
+	res, _, _, err := Acquire(ref, "^1", "") // warms the mirror cache
+	require.NoError(t, err)
+
+	require.NoError(t, os.RemoveAll(repo)) // origin gone: any fetch now fails
+	forgetFetch(repo)                      // a fresh process has no in-process fetch mark
+
+	lib, sp, err := AcquireAtCommit(ref, res.Commit)
+	require.NoError(t, err)
+	require.Equal(t, "demo", lib.Meta.Name)
+	require.Equal(t, "spec v1.1", string(sp.SpecDoc))
+}
+
 // TestAcquireAtCommitLocalFallback covers the non-git local source case: with
 // no commits to pin against (acquireLocal always reports the "local"
 // sentinel), AcquireAtCommit ignores the given commit and reads the current

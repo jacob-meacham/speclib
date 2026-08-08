@@ -95,6 +95,21 @@ func mirrorReady(location, dir string) bool {
 	return err == nil
 }
 
+// mirrorHasCommit reports whether location's mirror cache already contains
+// commit. A pinned commit is immutable, so a hit means the mirror can serve
+// reads at that commit without any clone or fetch.
+func mirrorHasCommit(location, commit string) bool {
+	dir, err := gitCacheDir(location)
+	if err != nil {
+		return false
+	}
+	if _, err := os.Stat(dir); err != nil {
+		return false
+	}
+	_, err = gitRun(dir, "cat-file", "-e", commit+"^{commit}")
+	return err == nil
+}
+
 // lockFilePath returns the path of the advisory lock file guarding
 // concurrent clone/fetch of dir. It lives alongside dir (same parent), so
 // it does not need its own directory setup beyond dir's parent.

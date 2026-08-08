@@ -193,6 +193,9 @@ func runInteractive(cmd *cobra.Command, only string) error {
 	}
 	names := make([]string, 0, len(pending))
 	for _, p := range pending {
+		// Announce before acquiring: materialization may fetch the source
+		// over the network, and a slow fetch with no output reads as a hang.
+		fmt.Fprintf(cmd.OutOrStdout(), "Materializing %s...\n", p.Name)
 		if _, err := syncplan.Materialize(paths.WorkDir, m.Dependencies[p.Name], p, m.Project.Checks); err != nil {
 			return err
 		}
@@ -249,6 +252,9 @@ func runHeadless(cmd *cobra.Command, only string, backend agent.Backend, timeout
 		backend = agent.HeadlessClaude{Adapter: ad, Permissions: m.AgentPermissions(), Progress: cmd.ErrOrStderr()}
 	}
 	for _, p := range pending {
+		// Announce before acquiring: materialization may fetch the source
+		// over the network, and a slow fetch with no output reads as a hang.
+		fmt.Fprintf(cmd.OutOrStdout(), "Materializing %s...\n", p.Name)
 		item, err := syncplan.Materialize(paths.WorkDir, m.Dependencies[p.Name], p, m.Project.Checks)
 		if err != nil {
 			return err

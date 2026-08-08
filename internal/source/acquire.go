@@ -107,10 +107,17 @@ func acquireGit(ref Ref, constraint, explicit string) (Resolved, *manifest.Libra
 // so commit is ignored and this falls back to reading the current working
 // tree, same as Acquire does for that source.
 func AcquireAtCommit(ref Ref, commit string) (*manifest.Library, *spec.Spec, error) {
-	forgetFetch(ref.Location)
 	if ref.IsLocal && !isGitRepoWithTags(ref.Location) {
 		_, lib, sp, err := acquireLocal(ref)
 		return lib, sp, err
+	}
+	// A pinned commit is immutable: when the mirror already contains it,
+	// serve every read from the cache with no clone/fetch (and no network
+	// hang). Only a missing commit forces a fresh fetch.
+	if mirrorHasCommit(ref.Location, commit) {
+		markFetched(ref.Location)
+	} else {
+		forgetFetch(ref.Location)
 	}
 	return readLibAndSpec(ref.Location, commit)
 }

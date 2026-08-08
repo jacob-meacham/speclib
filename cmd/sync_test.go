@@ -345,6 +345,32 @@ func TestSyncNonTTYWithoutHeadlessErrors(t *testing.T) {
 	require.Equal(t, "not a terminal; pass --headless for non-interactive use", err.Error())
 }
 
+// The Materializing lines exist so sync is never silent while it acquires
+// sources: materialization may fetch over the network, and a slow fetch with
+// no output reads as a hang.
+func TestSyncHeadlessPrintsMaterializeProgress(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir)
+
+	out, err := runSyncWithStub(t, dir, "sync", "--headless")
+	require.NoError(t, err)
+	require.Contains(t, out, "Materializing demo...")
+}
+
+func TestSyncInteractivePrintsMaterializeProgress(t *testing.T) {
+	dir := t.TempDir()
+	setupPending(t, dir)
+	stubTTY(t, true)
+	binDir := filepath.Join(dir, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "claude"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	out, err := runSyncWithStub(t, dir, "sync")
+	require.NoError(t, err)
+	require.Contains(t, out, "Materializing demo...")
+}
+
 func TestSyncInteractiveLaunchesAgentAndSummarizes(t *testing.T) {
 	dir := t.TempDir()
 	setupPending(t, dir)
